@@ -37,8 +37,21 @@ import {
   Grid3X3,
   Palette,
   PaintBucket,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  AlignJustify,
+  Bold,
+  Italic,
+  Underline as UnderlineIcon,
+  Strikethrough,
+  Superscript,
+  Subscript,
+  Link2,
+  Link2Off,
+  PenTool,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useAuth } from '../auth/authContext';
 import type { EditorEngine } from '../editor/EditorEngine';
 import { importFontFile } from '../lib/fontManager';
@@ -155,7 +168,7 @@ function TransformSection({ engine }: { engine: EditorEngine }) {
   );
 }
 
-type ShapeType = 'rect' | 'ellipse' | 'triangle' | 'line';
+type ShapeType = 'rect' | 'ellipse' | 'triangle' | 'line' | 'freeform';
 
 function ShapeLibrarySection({ engine }: { engine: EditorEngine }) {
   const setTool = useEditorStore((state) => state.setTool);
@@ -164,9 +177,15 @@ function ShapeLibrarySection({ engine }: { engine: EditorEngine }) {
     { id: 'ellipse', name: '圆形', hint: '创建正圆并自由缩放', icon: Circle },
     { id: 'triangle', name: '三角形', hint: '适合标识与几何构图', icon: Triangle },
     { id: 'line', name: '直线', hint: '可调颜色、宽度和旋转', icon: Minus },
+    { id: 'freeform', name: '自由图形', hint: '手绘轮廓，松开后自动闭合', icon: PenTool },
   ];
 
   const createShape = (type: ShapeType) => {
+    if (type === 'freeform') {
+      engine.beginFreeformShape();
+      setTool('shapes');
+      return;
+    }
     engine.setTool('select');
     engine.addShape(type);
     setTool('select');
@@ -187,7 +206,123 @@ function ShapeLibrarySection({ engine }: { engine: EditorEngine }) {
           );
         })}
       </div>
-      <p className="shape-library-note">矩形、圆形和三角形支持内部、居中、外部描边；矩形创建后可继续调节圆角。</p>
+      <p className="shape-library-note">矩形、圆形和三角形支持独立圆角；点击链条可统一或分别设置。自由图形松开后自动闭合，并直接进入属性调节。</p>
+    </section>
+  );
+}
+
+const BUILT_IN_FONTS = [
+  { value: 'Source Han Sans SC', label: '思源黑体' },
+  { value: 'Source Han Serif SC', label: '思源宋体' },
+  { value: 'Jiangxi Zhuokai', label: '江西拙楷' },
+  { value: 'MiSans', label: 'MiSans' },
+  { value: 'Microsoft YaHei', label: '微软雅黑' },
+  { value: 'SimSun', label: '宋体' },
+  { value: 'Arial', label: 'Arial' },
+];
+
+function CharacterSection({ engine }: { engine: EditorEngine }) {
+  const inspector = useEditorStore((state) => state.inspector);
+  const setInspector = useEditorStore((state) => state.setInspector);
+  const fontFamilies = useEditorStore((state) => state.fontFamilies);
+  const addFontFamily = useEditorStore((state) => state.addFontFamily);
+  const fontInput = useRef<HTMLInputElement>(null);
+  const [fontStatus, setFontStatus] = useState('');
+
+  const updateLive = (value: Partial<InspectorState>) => {
+    setInspector(value);
+    engine.updateActiveProperties(value);
+  };
+  const updateNow = (value: Partial<InspectorState>) => {
+    updateLive(value);
+    engine.commitPropertyChange();
+  };
+  const fontOptions = [
+    ...BUILT_IN_FONTS,
+    ...fontFamilies
+      .filter((font) => !BUILT_IN_FONTS.some((item) => item.value === font))
+      .map((font) => ({ value: font, label: font })),
+  ];
+  const toggle = (label: string, active: boolean, icon: ReactNode, onClick: () => void) => (
+    <button type="button" aria-label={label} title={label} aria-pressed={active} className={active ? 'is-active' : ''} onClick={onClick}>{icon}</button>
+  );
+
+  return (
+    <section className="inspector-section character-section">
+      <div className="section-title"><span>字符</span><small>专业文字排版</small></div>
+      <div className="character-font-grid">
+        <label className="character-select character-family"><span>字体</span><select value={inspector.fontFamily} onChange={(event) => updateNow({ fontFamily: event.target.value })}>
+          {fontOptions.map((font) => <option key={font.value} value={font.value}>{font.label}</option>)}
+        </select></label>
+        <label className="character-select"><span>字重</span><select value={inspector.fontWeight} onChange={(event) => updateNow({ fontWeight: event.target.value, textFauxBold: false })}>
+          <option value="200">极细 200</option>
+          <option value="300">细体 300</option>
+          <option value="400">常规 400</option>
+          <option value="500">中等 500</option>
+          <option value="600">半粗 600</option>
+          <option value="700">粗体 700</option>
+          <option value="800">特粗 800</option>
+          <option value="900">黑体 900</option>
+        </select></label>
+      </div>
+
+      <div className="character-number-grid">
+        <NumberField label="字号" value={inspector.fontSize} onChange={(fontSize) => updateLive({ fontSize })} onCommit={() => engine.commitPropertyChange()} />
+        <NumberField label="行距" value={inspector.lineHeight} onChange={(lineHeight) => updateLive({ lineHeight })} onCommit={() => engine.commitPropertyChange()} />
+        <NumberField label="字偶距" value={inspector.textKerning} onChange={(textKerning) => updateLive({ textKerning })} onCommit={() => engine.commitPropertyChange()} />
+        <NumberField label="字间距" value={inspector.textTracking} onChange={(textTracking) => updateLive({ textTracking })} onCommit={() => engine.commitPropertyChange()} />
+        <NumberField label="字符压缩%" value={inspector.textCompression} onChange={(textCompression) => updateLive({ textCompression })} onCommit={() => engine.commitPropertyChange()} />
+        <NumberField label="水平缩放%" value={inspector.textHorizontalScale} onChange={(textHorizontalScale) => updateLive({ textHorizontalScale })} onCommit={() => engine.commitPropertyChange()} />
+        <NumberField label="垂直缩放%" value={inspector.textVerticalScale} onChange={(textVerticalScale) => updateLive({ textVerticalScale })} onCommit={() => engine.commitPropertyChange()} />
+        <NumberField label="基线偏移" value={inspector.textBaselineShift} onChange={(textBaselineShift) => updateLive({ textBaselineShift })} onCommit={() => engine.commitPropertyChange()} />
+      </div>
+
+      <label className="color-field character-color"><span>文字颜色</span><input type="color" value={inspector.fill} onChange={(event) => updateNow({ fill: event.target.value, fillOpacity: inspector.fillOpacity })} /><code>{inspector.fill}</code></label>
+
+      <div className="character-control-label">段落对齐</div>
+      <div className="character-toggle-row four">
+        {toggle('左对齐', inspector.textAlign === 'left', <AlignLeft size={15} />, () => updateNow({ textAlign: 'left' }))}
+        {toggle('居中对齐', inspector.textAlign === 'center', <AlignCenter size={15} />, () => updateNow({ textAlign: 'center' }))}
+        {toggle('右对齐', inspector.textAlign === 'right', <AlignRight size={15} />, () => updateNow({ textAlign: 'right' }))}
+        {toggle('两端对齐', inspector.textAlign === 'justify', <AlignJustify size={15} />, () => updateNow({ textAlign: 'justify' }))}
+      </div>
+
+      <div className="character-control-label">字符样式</div>
+      <div className="character-toggle-row six">
+        {toggle('仿粗体', inspector.textFauxBold, <Bold size={15} />, () => updateNow({ textFauxBold: !inspector.textFauxBold }))}
+        {toggle('仿斜体', inspector.textFauxItalic, <Italic size={15} />, () => updateNow({ textFauxItalic: !inspector.textFauxItalic }))}
+        {toggle('下划线', inspector.underline, <UnderlineIcon size={15} />, () => updateNow({ underline: !inspector.underline }))}
+        {toggle('删除线', inspector.linethrough, <Strikethrough size={15} />, () => updateNow({ linethrough: !inspector.linethrough }))}
+        {toggle('上标', inspector.textSuperscript, <Superscript size={15} />, () => updateNow({ textSuperscript: !inspector.textSuperscript, textSubscript: false }))}
+        {toggle('下标', inspector.textSubscript, <Subscript size={15} />, () => updateNow({ textSubscript: !inspector.textSubscript, textSuperscript: false }))}
+      </div>
+
+      <div className="character-case-row" role="group" aria-label="大小写样式">
+        <button type="button" className={inspector.textCase === 'normal' ? 'is-active' : ''} onClick={() => updateNow({ textCase: 'normal' })}>原样</button>
+        <button type="button" className={inspector.textCase === 'uppercase' ? 'is-active' : ''} onClick={() => updateNow({ textCase: 'uppercase' })}>全部大写</button>
+        <button type="button" className={inspector.textCase === 'small-caps' ? 'is-active' : ''} onClick={() => updateNow({ textCase: 'small-caps' })}>小型大写</button>
+      </div>
+
+      <button type="button" className="font-import-button" onClick={() => fontInput.current?.click()}><Upload size={14} />导入本地字体</button>
+      <input
+        ref={fontInput}
+        hidden
+        type="file"
+        accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) {
+            setFontStatus('正在载入字体…');
+            void importFontFile(file).then((font) => {
+              addFontFamily(font);
+              updateNow({ fontFamily: font });
+              setFontStatus(`已导入 ${font}`);
+            }).catch((error: Error) => setFontStatus(error.message || '字体文件无法载入'));
+          }
+          event.currentTarget.value = '';
+        }}
+      />
+      {fontStatus && <small className="font-status">{fontStatus}</small>}
     </section>
   );
 }
@@ -196,16 +331,12 @@ function AppearanceSection({ engine }: { engine: EditorEngine }) {
   const inspector = useEditorStore((state) => state.inspector);
   const selectedType = useEditorStore((state) => state.selectedType);
   const setInspector = useEditorStore((state) => state.setInspector);
-  const fontFamilies = useEditorStore((state) => state.fontFamilies);
-  const addFontFamily = useEditorStore((state) => state.addFontFamily);
-  const fontInput = useRef<HTMLInputElement>(null);
   const [gradientStart, setGradientStart] = useState('#38bdf8');
   const [gradientEnd, setGradientEnd] = useState('#6366f1');
   const [gradientAngle, setGradientAngle] = useState(0);
   const [strokeGradientStart, setStrokeGradientStart] = useState('#f97316');
   const [strokeGradientEnd, setStrokeGradientEnd] = useState('#7c3aed');
   const [strokeGradientAngle, setStrokeGradientAngle] = useState(0);
-  const [fontStatus, setFontStatus] = useState('');
   const update = (value: Partial<InspectorState>) => {
     setInspector(value);
     engine.updateActiveProperties(value);
@@ -213,12 +344,18 @@ function AppearanceSection({ engine }: { engine: EditorEngine }) {
   };
 
   if (!['rect', 'circle', 'triangle', 'line', 'i-text', 'textbox', 'text', 'path'].includes(selectedType || '')) return null;
+  const textSelected = ['i-text', 'textbox', 'text'].includes(selectedType || '');
   const supportsStrokePosition = ['rect', 'circle', 'triangle'].includes(selectedType || '');
+  const supportsCornerControl = ['rect', 'circle', 'triangle'].includes(selectedType || '');
   const maxCornerRadius = Math.max(0, Math.min(200, Math.min(inspector.width, inspector.height) / 2));
+  const updateCorner = (value: Partial<InspectorState>) => {
+    setInspector(value);
+    engine.updateActiveProperties(value);
+  };
   return (
     <section className="inspector-section">
       <div className="section-title"><span>外观</span></div>
-      {selectedType !== 'line' && (
+      {selectedType !== 'line' && !textSelected && (
         <>
           <label className="color-field"><span>填充</span><input type="color" value={inspector.fill} onChange={(event) => update({ fill: event.target.value, fillOpacity: inspector.fillOpacity })} /><code>{inspector.fill}</code></label>
           <RangeControl
@@ -259,48 +396,30 @@ function AppearanceSection({ engine }: { engine: EditorEngine }) {
           </ToggleGroup.Root>
         </div>
       )}
-      {selectedType === 'rect' && (
-        <RangeControl
-          label="矩形圆角"
-          value={inspector.cornerRadius}
-          min={0}
-          max={maxCornerRadius}
-          suffix="px"
-          onChange={(cornerRadius) => { setInspector({ cornerRadius }); engine.updateActiveProperties({ cornerRadius }); }}
-          onCommit={() => engine.commitPropertyChange()}
-        />
-      )}
-      {selectedType === 'i-text' && (
-        <div className="text-controls">
-          <label><span>字体</span><select value={inspector.fontFamily} onChange={(event) => update({ fontFamily: event.target.value })}>
-            <option value="Microsoft YaHei">微软雅黑</option>
-            <option value="SimSun">宋体</option>
-            <option value="Arial">Arial</option>
-            <option value="Georgia">Georgia</option>
-            <option value="Impact">Impact</option>
-            {fontFamilies.map((font) => <option key={font} value={font}>{font}</option>)}
-          </select></label>
-          <NumberField label="字号" value={inspector.fontSize} onChange={(fontSize) => { setInspector({ fontSize }); engine.updateActiveProperties({ fontSize }); }} onCommit={() => engine.commitPropertyChange()} />
-          <button type="button" className="font-import-button" onClick={() => fontInput.current?.click()}><Upload size={14} />导入本地字体</button>
-          <input
-            ref={fontInput}
-            hidden
-            type="file"
-            accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) {
-                setFontStatus('正在载入字体…');
-                void importFontFile(file).then((font) => {
-                  addFontFamily(font);
-                  update({ fontFamily: font });
-                  setFontStatus(`已导入 ${font}`);
-                }).catch((error: Error) => setFontStatus(error.message || '字体文件无法载入'));
-              }
-              event.currentTarget.value = '';
-            }}
-          />
-          {fontStatus && <small className="font-status">{fontStatus}</small>}
+      {supportsCornerControl && (
+        <div className="corner-radius-controls">
+          <div className="corner-radius-heading">
+            <div><strong>圆角</strong><small>最大约 {Math.round(maxCornerRadius)} px</small></div>
+            <button
+              type="button"
+              className={inspector.cornersLinked ? 'is-active' : ''}
+              title={inspector.cornersLinked ? '解除四角联动' : '联动四个角'}
+              aria-label={inspector.cornersLinked ? '解除四角联动' : '联动四个角'}
+              aria-pressed={inspector.cornersLinked}
+              onClick={() => {
+                if (!inspector.cornersLinked) {
+                  const radius = inspector.cornerTopLeft;
+                  update({ cornersLinked: true, cornerTopLeft: radius, cornerTopRight: radius, cornerBottomRight: radius, cornerBottomLeft: radius });
+                } else update({ cornersLinked: false });
+              }}
+            >{inspector.cornersLinked ? <Link2 size={15} /> : <Link2Off size={15} />}</button>
+          </div>
+          <div className="corner-radius-grid">
+            <NumberField label="左上" value={inspector.cornerTopLeft} onChange={(cornerTopLeft) => updateCorner({ cornerTopLeft })} onCommit={() => engine.commitPropertyChange()} />
+            <NumberField label="右上" value={inspector.cornerTopRight} onChange={(cornerTopRight) => updateCorner({ cornerTopRight })} onCommit={() => engine.commitPropertyChange()} />
+            <NumberField label="左下" value={inspector.cornerBottomLeft} onChange={(cornerBottomLeft) => updateCorner({ cornerBottomLeft })} onCommit={() => engine.commitPropertyChange()} />
+            <NumberField label="右下" value={inspector.cornerBottomRight} onChange={(cornerBottomRight) => updateCorner({ cornerBottomRight })} onCommit={() => engine.commitPropertyChange()} />
+          </div>
         </div>
       )}
       {selectedType !== 'line' && (
@@ -909,6 +1028,7 @@ export function PropertiesPanel({
         <button type="button" onClick={() => engine.ungroupActive()}><Ungroup size={15} />取消组合</button>
       </div>
       {selectedType === 'image' && <ImageSection engine={engine} />}
+      {['i-text', 'textbox', 'text'].includes(selectedType || '') && <CharacterSection engine={engine} />}
       <AppearanceSection engine={engine} />
     </div>
   );

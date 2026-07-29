@@ -49,6 +49,7 @@ export function CanvasStage({ onReady, initialProject, onInitialized, onDocument
       },
       onProcessing: (processing, label) => useEditorStore.getState().setProcessing(processing, label),
       onToast,
+      onToolChange: (tool) => useEditorStore.getState().setTool(tool),
       onOpenSmartObject,
     }, { userId });
     engine.setTool(store.activeTool);

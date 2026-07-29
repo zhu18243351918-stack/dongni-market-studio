@@ -24,6 +24,15 @@ export type ToolId =
 export type SelectionCombineMode = 'replace' | 'add' | 'subtract';
 export type SelectionPreviewMode = 'overlay' | 'transparent' | 'black' | 'white';
 export type StrokePosition = 'inside' | 'center' | 'outside';
+export type TextCaseMode = 'normal' | 'uppercase' | 'small-caps';
+export type ShapeKind = 'rect' | 'ellipse' | 'triangle' | 'line' | 'freeform';
+
+export interface CornerRadii {
+  topLeft: number;
+  topRight: number;
+  bottomRight: number;
+  bottomLeft: number;
+}
 
 export interface ImageAdjustments {
   brightness: number;
@@ -347,6 +356,22 @@ export interface EditorObjectMetadata {
   backgroundLayer?: boolean;
   strokePosition?: StrokePosition;
   visualStyle?: 'pixel' | 'comic';
+  shapeKind?: ShapeKind;
+  cornerRadii?: CornerRadii;
+  cornersLinked?: boolean;
+  textKerning?: number;
+  textTracking?: number;
+  textCompression?: number;
+  textHorizontalScale?: number;
+  textVerticalScale?: number;
+  textBaselineShift?: number;
+  textCase?: TextCaseMode;
+  textOriginalText?: string;
+  textBaseFontWeight?: string;
+  textFauxBold?: boolean;
+  textFauxItalic?: boolean;
+  textSuperscript?: boolean;
+  textSubscript?: boolean;
 }
 
 export interface StoredFontAsset {
@@ -368,11 +393,31 @@ export interface InspectorState {
   strokeOpacity: number;
   strokeWidth: number;
   strokePosition: StrokePosition;
+  shapeKind: ShapeKind | '';
   cornerRadius: number;
+  cornerTopLeft: number;
+  cornerTopRight: number;
+  cornerBottomRight: number;
+  cornerBottomLeft: number;
+  cornersLinked: boolean;
   fontSize: number;
   fontFamily: string;
   fontWeight: string;
   textAlign: string;
+  lineHeight: number;
+  textKerning: number;
+  textTracking: number;
+  textCompression: number;
+  textHorizontalScale: number;
+  textVerticalScale: number;
+  textBaselineShift: number;
+  textCase: TextCaseMode;
+  textFauxBold: boolean;
+  textFauxItalic: boolean;
+  textSuperscript: boolean;
+  textSubscript: boolean;
+  underline: boolean;
+  linethrough: boolean;
 }
 
 export const DEFAULT_INSPECTOR: InspectorState = {
@@ -388,9 +433,29 @@ export const DEFAULT_INSPECTOR: InspectorState = {
   strokeOpacity: 1,
   strokeWidth: 0,
   strokePosition: 'center',
+  shapeKind: '',
   cornerRadius: 0,
+  cornerTopLeft: 0,
+  cornerTopRight: 0,
+  cornerBottomRight: 0,
+  cornerBottomLeft: 0,
+  cornersLinked: true,
   fontSize: 48,
-  fontFamily: 'Microsoft YaHei',
+  fontFamily: 'Source Han Sans SC',
   fontWeight: '400',
   textAlign: 'left',
+  lineHeight: 1.2,
+  textKerning: 0,
+  textTracking: 0,
+  textCompression: 0,
+  textHorizontalScale: 100,
+  textVerticalScale: 100,
+  textBaselineShift: 0,
+  textCase: 'normal',
+  textFauxBold: false,
+  textFauxItalic: false,
+  textSuperscript: false,
+  textSubscript: false,
+  underline: false,
+  linethrough: false,
 };

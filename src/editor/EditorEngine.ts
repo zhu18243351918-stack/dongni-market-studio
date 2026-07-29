@@ -78,6 +78,7 @@ interface EditorCallbacks {
   onDocumentChange: (project: ProjectDocument) => void;
   onProcessing: (processing: boolean, label?: string) => void;
   onToast: (message: string, tone?: 'default' | 'success' | 'error') => void;
+  onToolChange?: (tool: ToolId) => void;
   onOpenSmartObject?: (source: SmartObjectSource) => void;
 }
 
@@ -122,9 +123,143 @@ const CUSTOM_PROPERTIES = [
   'backgroundLayer',
   'strokePosition',
   'visualStyle',
+  'shapeKind',
+  'cornerRadii',
+  'cornersLinked',
+  'textKerning',
+  'textTracking',
+  'textCompression',
+  'textHorizontalScale',
+  'textVerticalScale',
+  'textBaselineShift',
+  'textCase',
+  'textOriginalText',
+  'textBaseFontWeight',
+  'textFauxBold',
+  'textFauxItalic',
+  'textSuperscript',
+  'textSubscript',
 ];
 
 FabricObject.customProperties = CUSTOM_PROPERTIES;
+
+type ShapeRenderer = EditorObject & {
+  _renderPaintInOrder: (context: CanvasRenderingContext2D) => void;
+};
+
+function normalizeCornerRadii(object: EditorObject) {
+  const fallback = object.type === 'rect' ? Number((object as Rect).rx || 0) : 0;
+  const source = object.cornerRadii || {
+    topLeft: fallback,
+    topRight: fallback,
+    bottomRight: fallback,
+    bottomLeft: fallback,
+  };
+  const width = Math.max(0, object.width || 0);
+  const height = Math.max(0, object.height || 0);
+  const radii = {
+    topLeft: Math.max(0, source.topLeft || 0),
+    topRight: Math.max(0, source.topRight || 0),
+    bottomRight: Math.max(0, source.bottomRight || 0),
+    bottomLeft: Math.max(0, source.bottomLeft || 0),
+  };
+  const ratios = [
+    radii.topLeft + radii.topRight ? width / (radii.topLeft + radii.topRight) : 1,
+    radii.bottomLeft + radii.bottomRight ? width / (radii.bottomLeft + radii.bottomRight) : 1,
+    radii.topLeft + radii.bottomLeft ? height / (radii.topLeft + radii.bottomLeft) : 1,
+    radii.topRight + radii.bottomRight ? height / (radii.topRight + radii.bottomRight) : 1,
+  ];
+  const scale = Math.min(1, ...ratios);
+  return {
+    topLeft: radii.topLeft * scale,
+    topRight: radii.topRight * scale,
+    bottomRight: radii.bottomRight * scale,
+    bottomLeft: radii.bottomLeft * scale,
+  };
+}
+
+function drawIndependentRoundedRect(context: CanvasRenderingContext2D, object: EditorObject) {
+  const width = object.width || 0;
+  const height = object.height || 0;
+  const left = -width / 2;
+  const top = -height / 2;
+  const radii = normalizeCornerRadii(object);
+  context.beginPath();
+  context.moveTo(left + radii.topLeft, top);
+  context.lineTo(left + width - radii.topRight, top);
+  context.quadraticCurveTo(left + width, top, left + width, top + radii.topRight);
+  context.lineTo(left + width, top + height - radii.bottomRight);
+  context.quadraticCurveTo(left + width, top + height, left + width - radii.bottomRight, top + height);
+  context.lineTo(left + radii.bottomLeft, top + height);
+  context.quadraticCurveTo(left, top + height, left, top + height - radii.bottomLeft);
+  context.lineTo(left, top + radii.topLeft);
+  context.quadraticCurveTo(left, top, left + radii.topLeft, top);
+  context.closePath();
+}
+
+function drawRoundedTriangle(context: CanvasRenderingContext2D, object: EditorObject) {
+  const width = object.width || 0;
+  const height = object.height || 0;
+  const source = normalizeCornerRadii(object);
+  const vertices = [
+    { x: 0, y: -height / 2, radius: (source.topLeft + source.topRight) / 2 },
+    { x: width / 2, y: height / 2, radius: source.bottomRight },
+    { x: -width / 2, y: height / 2, radius: source.bottomLeft },
+  ];
+  const rounded = vertices.map((vertex, index) => {
+    const previous = vertices[(index + vertices.length - 1) % vertices.length];
+    const next = vertices[(index + 1) % vertices.length];
+    const previousLength = Math.hypot(previous.x - vertex.x, previous.y - vertex.y);
+    const nextLength = Math.hypot(next.x - vertex.x, next.y - vertex.y);
+    const distance = Math.min(Math.max(0, vertex.radius), previousLength * .42, nextLength * .42);
+    const toward = (target: { x: number; y: number }, length: number) => ({
+      x: vertex.x + (target.x - vertex.x) / Math.max(1, length) * distance,
+      y: vertex.y + (target.y - vertex.y) / Math.max(1, length) * distance,
+    });
+    return { vertex, entry: toward(previous, previousLength), exit: toward(next, nextLength) };
+  });
+  context.beginPath();
+  context.moveTo(rounded[0].entry.x, rounded[0].entry.y);
+  rounded.forEach(({ vertex, exit }, index) => {
+    context.quadraticCurveTo(vertex.x, vertex.y, exit.x, exit.y);
+    const nextEntry = rounded[(index + 1) % rounded.length].entry;
+    context.lineTo(nextEntry.x, nextEntry.y);
+  });
+  context.closePath();
+}
+
+const baseRectRenderer = (Rect.prototype as unknown as { _render: (context: CanvasRenderingContext2D) => void })._render;
+(Rect.prototype as unknown as { _render: (context: CanvasRenderingContext2D) => void })._render = function renderIndependentRoundedRect(context) {
+  const object = this as unknown as ShapeRenderer;
+  if (!object.cornerRadii || object.backgroundLayer || object.isArtboard) {
+    baseRectRenderer.call(object, context);
+    return;
+  }
+  drawIndependentRoundedRect(context, object);
+  object._renderPaintInOrder(context);
+};
+
+const baseCircleRenderer = (Circle.prototype as unknown as { _render: (context: CanvasRenderingContext2D) => void })._render;
+(Circle.prototype as unknown as { _render: (context: CanvasRenderingContext2D) => void })._render = function renderRoundedEllipse(context) {
+  const object = this as unknown as ShapeRenderer;
+  if (!object.cornerRadii || object.shapeKind !== 'ellipse') {
+    baseCircleRenderer.call(object, context);
+    return;
+  }
+  drawIndependentRoundedRect(context, object);
+  object._renderPaintInOrder(context);
+};
+
+const baseTriangleRenderer = (Triangle.prototype as unknown as { _render: (context: CanvasRenderingContext2D) => void })._render;
+(Triangle.prototype as unknown as { _render: (context: CanvasRenderingContext2D) => void })._render = function renderIndependentRoundedTriangle(context) {
+  const object = this as unknown as ShapeRenderer;
+  if (!object.cornerRadii) {
+    baseTriangleRenderer.call(object, context);
+    return;
+  }
+  drawRoundedTriangle(context, object);
+  object._renderPaintInOrder(context);
+};
 
 const baseStrokeRenderer = (FabricObject.prototype as unknown as { _renderStroke: (context: CanvasRenderingContext2D) => void })._renderStroke;
 (FabricObject.prototype as unknown as { _renderStroke: (context: CanvasRenderingContext2D) => void })._renderStroke = function renderPositionedStroke(context) {
@@ -257,6 +392,10 @@ function isImageObject(object: FabricObject | null | undefined): object is Edito
   return Boolean(object && object.type?.toLowerCase() === 'image');
 }
 
+function isTextObject(object: FabricObject | null | undefined): object is EditorObject & IText {
+  return Boolean(object && ['i-text', 'textbox', 'text'].includes(object.type?.toLowerCase() || ''));
+}
+
 export class EditorEngine {
   readonly canvas: Canvas;
   private overlay: HTMLCanvasElement;
@@ -332,6 +471,8 @@ export class EditorEngine {
   private patchEnd: Point | null = null;
   private regionStart: Point | null = null;
   private regionEnd: Point | null = null;
+  private freeformShapeDrawing = false;
+  private textHistoryTimer: number | null = null;
 
   constructor(
     canvasElement: HTMLCanvasElement,
@@ -580,6 +721,38 @@ export class EditorEngine {
     });
     this.canvas.on('path:created', (event) => {
       const object = event.path as EditorObject;
+      if (this.freeformShapeDrawing) {
+        const drawable = object as EditorObject & { path?: unknown[][] };
+        if (drawable.path?.length && drawable.path[drawable.path.length - 1]?.[0] !== 'Z') drawable.path.push(['Z']);
+        object.id = createId('freeform');
+        object.name = '自由图形';
+        object.paintLayer = false;
+        object.shapeKind = 'freeform';
+        object.cornerRadii = { topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0 };
+        object.cornersLinked = true;
+        object.artboardId = this.activeArtboardId;
+        object.set({
+          fill: '#38bdf8',
+          stroke: '#172033',
+          strokeWidth: 2,
+          strokeLineCap: 'round',
+          strokeLineJoin: 'round',
+          objectCaching: false,
+        });
+        object.setCoords();
+        this.freeformShapeDrawing = false;
+        this.canvas.isDrawingMode = false;
+        this.canvas.selection = true;
+        this.canvas.skipTargetFind = false;
+        this.canvas.setActiveObject(object);
+        this.currentTool = 'select';
+        this.applyToolCursor();
+        this.callbacks.onToolChange?.('select');
+        this.syncSelection();
+        this.commitHistory();
+        this.callbacks.onToast('自由图形已闭合，可继续调节填充、描边和尺寸', 'success');
+        return;
+      }
       object.id = createId('brush');
       object.name = '画笔';
       object.paintLayer = true;
@@ -587,6 +760,17 @@ export class EditorEngine {
       this.canvas.setActiveObject(object);
       this.syncSelection();
       this.commitHistory();
+    });
+    this.canvas.on('text:changed', (event) => {
+      const object = event.target as EditorObject | undefined;
+      if (!isTextObject(object)) return;
+      object.textOriginalText = object.text || '';
+      this.syncSelection();
+      if (this.textHistoryTimer !== null) window.clearTimeout(this.textHistoryTimer);
+      this.textHistoryTimer = window.setTimeout(() => {
+        this.textHistoryTimer = null;
+        this.commitHistory();
+      }, 420);
     });
     this.canvas.on('mouse:wheel', (event) => {
       const wheelEvent = event.e as WheelEvent;
@@ -1673,6 +1857,7 @@ export class EditorEngine {
   }
 
   setTool(tool: ToolId) {
+    this.freeformShapeDrawing = false;
     const selectionTools: ToolId[] = ['edge-cutout', 'quick-select', 'magic-wand', 'lasso', 'polygon-lasso'];
     const selectionAwareTools: ToolId[] = [...selectionTools, 'patch', 'face-retouch'];
     if (selectionAwareTools.includes(this.currentTool) && !selectionAwareTools.includes(tool)) this.clearPixelSelection();
@@ -1720,6 +1905,22 @@ export class EditorEngine {
     this.renderOverlay();
   }
 
+  beginFreeformShape() {
+    this.setTool('shapes');
+    this.freeformShapeDrawing = true;
+    this.canvas.discardActiveObject();
+    this.canvas.isDrawingMode = true;
+    this.canvas.selection = false;
+    this.canvas.skipTargetFind = true;
+    const brush = new PencilBrush(this.canvas);
+    brush.color = '#172033';
+    brush.width = 2;
+    this.canvas.freeDrawingBrush = brush;
+    this.canvas.freeDrawingCursor = 'crosshair';
+    this.callbacks.onToast('在画板上拖动绘制轮廓，松开后自动闭合', 'default');
+    this.renderOverlay();
+  }
+
   private isPaintLayer(object: FabricObject | null | undefined): object is EditorObject {
     const editorObject = object as EditorObject | null | undefined;
     return Boolean(editorObject && (editorObject.paintLayer || editorObject.id?.startsWith('brush-') || editorObject.name?.startsWith('画笔')));
@@ -1741,14 +1942,29 @@ export class EditorEngine {
       originX: 'center',
       originY: 'center',
       fill: '#172033',
-      fontFamily: 'Microsoft YaHei',
+      fontFamily: 'Source Han Sans SC',
       fontSize: 64,
       fontWeight: '600',
+      lineHeight: 1.2,
+      charSpacing: 0,
       padding: 6,
-    }) as EditorObject;
+    }) as EditorObject & IText;
     text.id = createId('text');
     text.name = '文字';
     text.artboardId = this.activeArtboardId;
+    text.textOriginalText = text.text || '';
+    text.textBaseFontWeight = String(text.fontWeight || '400');
+    text.textCase = 'normal';
+    text.textKerning = 0;
+    text.textTracking = 0;
+    text.textCompression = 0;
+    text.textHorizontalScale = 100;
+    text.textVerticalScale = 100;
+    text.textBaselineShift = 0;
+    text.textFauxBold = false;
+    text.textFauxItalic = false;
+    text.textSuperscript = false;
+    text.textSubscript = false;
     this.addAndSelect(text);
   }
 
@@ -1800,6 +2016,16 @@ export class EditorEngine {
     object.name = type === 'ellipse' ? '圆形' : type === 'triangle' ? '三角形' : type === 'line' ? '直线' : '矩形';
     object.artboardId = this.activeArtboardId;
     object.strokePosition = 'center';
+    object.shapeKind = type;
+    const defaultRadius = type === 'ellipse' ? Math.min(object.width || 0, object.height || 0) / 2 : type === 'rect' ? 24 : type === 'triangle' ? 18 : 0;
+    object.cornerRadii = {
+      topLeft: defaultRadius,
+      topRight: defaultRadius,
+      bottomRight: defaultRadius,
+      bottomLeft: defaultRadius,
+    };
+    object.cornersLinked = true;
+    if (type !== 'line') object.objectCaching = false;
     this.addAndSelect(object);
   }
 
@@ -1851,15 +2077,113 @@ export class EditorEngine {
     } else if (properties.strokeWidth !== undefined) {
       next.strokeWidth = properties.strokeWidth * (currentStrokePosition === 'center' ? 1 : 2);
     }
-    if (properties.cornerRadius !== undefined && strokeTarget?.type === 'rect' && !strokeTarget.backgroundLayer && !this.isArtboardObject(strokeTarget)) {
-      const cornerRadius = Math.max(0, properties.cornerRadius);
-      next.rx = cornerRadius;
-      next.ry = cornerRadius;
+    const supportsCorners = Boolean(strokeTarget && ['rect', 'circle', 'triangle', 'path'].includes(strokeTarget.type || '') && !strokeTarget.backgroundLayer && !this.isArtboardObject(strokeTarget));
+    if (supportsCorners && strokeTarget) {
+      const current = normalizeCornerRadii(strokeTarget);
+      const linked = properties.cornersLinked ?? strokeTarget.cornersLinked ?? true;
+      const updates = {
+        topLeft: properties.cornerTopLeft,
+        topRight: properties.cornerTopRight,
+        bottomRight: properties.cornerBottomRight,
+        bottomLeft: properties.cornerBottomLeft,
+      };
+      if (properties.cornerRadius !== undefined) {
+        const radius = Math.max(0, properties.cornerRadius);
+        strokeTarget.cornerRadii = { topLeft: radius, topRight: radius, bottomRight: radius, bottomLeft: radius };
+      } else if (Object.values(updates).some((value) => value !== undefined)) {
+        const changed = Object.entries(updates).filter(([, value]) => value !== undefined);
+        if (linked && changed.length === 1) {
+          const radius = Math.max(0, Number(changed[0][1]));
+          strokeTarget.cornerRadii = { topLeft: radius, topRight: radius, bottomRight: radius, bottomLeft: radius };
+        } else {
+          strokeTarget.cornerRadii = {
+            topLeft: Math.max(0, updates.topLeft ?? current.topLeft),
+            topRight: Math.max(0, updates.topRight ?? current.topRight),
+            bottomRight: Math.max(0, updates.bottomRight ?? current.bottomRight),
+            bottomLeft: Math.max(0, updates.bottomLeft ?? current.bottomLeft),
+          };
+        }
+      }
+      strokeTarget.cornersLinked = linked;
+      if (strokeTarget.type === 'rect' && strokeTarget.cornerRadii) {
+        next.rx = Math.max(...Object.values(strokeTarget.cornerRadii));
+        next.ry = next.rx;
+      }
+      strokeTarget.objectCaching = false;
+      strokeTarget.dirty = true;
     }
-    if (properties.fontSize !== undefined && active.type === 'i-text') next.fontSize = properties.fontSize;
-    if (properties.fontFamily !== undefined && active.type === 'i-text') next.fontFamily = properties.fontFamily;
-    if (properties.fontWeight !== undefined && active.type === 'i-text') next.fontWeight = properties.fontWeight;
-    if (properties.textAlign !== undefined && active.type === 'i-text') next.textAlign = properties.textAlign;
+    if (isTextObject(active)) {
+      if (properties.fontSize !== undefined) next.fontSize = Math.max(1, properties.fontSize);
+      if (properties.fontFamily !== undefined) {
+        next.fontFamily = properties.fontFamily;
+        void document.fonts.load(`16px "${properties.fontFamily}"`).then(() => {
+          active.dirty = true;
+          this.canvas.requestRenderAll();
+        });
+      }
+      if (properties.fontWeight !== undefined) {
+        next.fontWeight = properties.fontWeight;
+        if (properties.textFauxBold !== true) active.textBaseFontWeight = String(properties.fontWeight);
+      }
+      if (properties.textAlign !== undefined) next.textAlign = properties.textAlign;
+      if (properties.lineHeight !== undefined) next.lineHeight = Math.max(.5, properties.lineHeight);
+      if (properties.textKerning !== undefined) active.textKerning = properties.textKerning;
+      if (properties.textTracking !== undefined) active.textTracking = properties.textTracking;
+      if (properties.textCompression !== undefined) active.textCompression = Math.max(0, Math.min(100, properties.textCompression));
+      if (properties.textKerning !== undefined || properties.textTracking !== undefined || properties.textCompression !== undefined) {
+        next.charSpacing = (active.textKerning || 0) + (active.textTracking || 0) - (active.textCompression || 0) * 5;
+      }
+      if (properties.textHorizontalScale !== undefined) {
+        const previous = Math.max(1, active.textHorizontalScale || 100);
+        const target = Math.max(10, Math.min(400, properties.textHorizontalScale));
+        active.scaleX = (active.scaleX || 1) * target / previous;
+        active.textHorizontalScale = target;
+      }
+      if (properties.textVerticalScale !== undefined) {
+        const previous = Math.max(1, active.textVerticalScale || 100);
+        const target = Math.max(10, Math.min(400, properties.textVerticalScale));
+        active.scaleY = (active.scaleY || 1) * target / previous;
+        active.textVerticalScale = target;
+      }
+      if (properties.textBaselineShift !== undefined) active.textBaselineShift = properties.textBaselineShift;
+      if (properties.textSuperscript !== undefined) {
+        active.textSuperscript = properties.textSuperscript;
+        if (properties.textSuperscript) active.textSubscript = false;
+      }
+      if (properties.textSubscript !== undefined) {
+        active.textSubscript = properties.textSubscript;
+        if (properties.textSubscript) active.textSuperscript = false;
+      }
+      if (properties.textBaselineShift !== undefined || properties.textSuperscript !== undefined || properties.textSubscript !== undefined || properties.fontSize !== undefined) {
+        const fontSize = Number(next.fontSize || active.fontSize || 48);
+        const scriptShift = active.textSuperscript ? -fontSize * .35 : active.textSubscript ? fontSize * .22 : 0;
+        next.deltaY = -(active.textBaselineShift || 0) + scriptShift;
+      }
+      if (properties.textFauxBold !== undefined) {
+        if (properties.textFauxBold && !active.textFauxBold) {
+          active.textBaseFontWeight = String(properties.fontWeight || active.fontWeight || '400');
+        }
+        active.textFauxBold = properties.textFauxBold;
+        next.fontWeight = properties.textFauxBold
+          ? '700'
+          : String(properties.fontWeight || active.textBaseFontWeight || '400');
+      }
+      if (properties.textFauxItalic !== undefined) {
+        active.textFauxItalic = properties.textFauxItalic;
+        next.fontStyle = properties.textFauxItalic ? 'italic' : 'normal';
+      }
+      if (properties.textCase !== undefined && properties.textCase !== active.textCase) {
+        if (!active.textOriginalText || active.textCase === 'normal') active.textOriginalText = active.text || '';
+        active.textCase = properties.textCase;
+        next.text = properties.textCase === 'normal'
+          ? (active.textOriginalText || active.text || '')
+          : (active.textOriginalText || active.text || '').toLocaleUpperCase('zh-CN');
+      }
+      if (properties.underline !== undefined) next.underline = properties.underline;
+      if (properties.linethrough !== undefined) next.linethrough = properties.linethrough;
+      active.objectCaching = false;
+      active.dirty = true;
+    }
     active.set(next);
     if (properties.width !== undefined && active.width) active.scaleX = properties.width / active.width;
     if (properties.height !== undefined && active.height) active.scaleY = properties.height / active.height;
@@ -2481,6 +2805,7 @@ export class EditorEngine {
       ? (appearanceTarget?.strokePosition || 'center')
       : 'center';
     const text = active as unknown as IText;
+    const cornerRadii = appearanceTarget ? normalizeCornerRadii(appearanceTarget) : { topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0 };
     const inspector: Partial<InspectorState> = {
       x: Math.round(active.left || 0),
       y: Math.round(active.top || 0),
@@ -2496,11 +2821,31 @@ export class EditorEngine {
       strokeOpacity: strokeInfo.opacity,
       strokeWidth: (appearanceTarget?.strokeWidth || 0) / (strokePosition === 'center' ? 1 : 2),
       strokePosition,
-      cornerRadius: appearanceTarget?.type === 'rect' ? ((appearanceTarget as Rect).rx || 0) : 0,
+      shapeKind: appearanceTarget?.shapeKind || '',
+      cornerRadius: cornerRadii.topLeft,
+      cornerTopLeft: cornerRadii.topLeft,
+      cornerTopRight: cornerRadii.topRight,
+      cornerBottomRight: cornerRadii.bottomRight,
+      cornerBottomLeft: cornerRadii.bottomLeft,
+      cornersLinked: appearanceTarget?.cornersLinked ?? true,
       fontSize: text.fontSize || 48,
-      fontFamily: text.fontFamily || 'Microsoft YaHei',
+      fontFamily: text.fontFamily || 'Source Han Sans SC',
       fontWeight: String(text.fontWeight || '400'),
       textAlign: text.textAlign || 'left',
+      lineHeight: text.lineHeight || 1.2,
+      textKerning: appearanceTarget?.textKerning || 0,
+      textTracking: appearanceTarget?.textTracking || 0,
+      textCompression: appearanceTarget?.textCompression || 0,
+      textHorizontalScale: appearanceTarget?.textHorizontalScale || 100,
+      textVerticalScale: appearanceTarget?.textVerticalScale || 100,
+      textBaselineShift: appearanceTarget?.textBaselineShift || 0,
+      textCase: appearanceTarget?.textCase || 'normal',
+      textFauxBold: Boolean(appearanceTarget?.textFauxBold),
+      textFauxItalic: Boolean(appearanceTarget?.textFauxItalic),
+      textSuperscript: Boolean(appearanceTarget?.textSuperscript),
+      textSubscript: Boolean(appearanceTarget?.textSubscript),
+      underline: Boolean(text.underline),
+      linethrough: Boolean(text.linethrough),
     };
     this.callbacks.onSelection(
       active.id || selectedIds[selectedIds.length - 1] || null,
@@ -4315,6 +4660,34 @@ export class EditorEngine {
         object.artboardId = this.artboards.find((artboard) => center.x >= artboard.x && center.x <= artboard.x + artboard.width && center.y >= artboard.y && center.y <= artboard.y + artboard.height)?.id || this.activeArtboardId;
       }
       if (object.type === 'path' && (object.id.startsWith('brush-') || object.name.startsWith('画笔'))) object.paintLayer = true;
+      if (!object.backgroundLayer && ['rect', 'circle', 'triangle', 'line'].includes(object.type || '')) {
+        object.shapeKind ||= object.type === 'circle' ? 'ellipse' : object.type as EditorObject['shapeKind'];
+        if (!object.cornerRadii && object.type !== 'line') {
+          const defaultRadius = object.type === 'rect'
+            ? Number((object as Rect).rx || 0)
+            : object.type === 'circle'
+              ? Math.min(object.width || 0, object.height || 0) / 2
+              : 0;
+          object.cornerRadii = { topLeft: defaultRadius, topRight: defaultRadius, bottomRight: defaultRadius, bottomLeft: defaultRadius };
+        }
+        object.cornersLinked ??= true;
+        if (object.type !== 'line') object.objectCaching = false;
+      }
+      if (isTextObject(object)) {
+        object.textOriginalText ||= object.text || '';
+        object.textBaseFontWeight ||= String(object.fontWeight || '400');
+        object.textCase ||= 'normal';
+        object.textKerning ??= 0;
+        object.textTracking ??= 0;
+        object.textCompression ??= 0;
+        object.textHorizontalScale ??= 100;
+        object.textVerticalScale ??= 100;
+        object.textBaselineShift ??= 0;
+        object.textFauxBold ??= false;
+        object.textFauxItalic ??= false;
+        object.textSuperscript ??= false;
+        object.textSubscript ??= false;
+      }
       object.set(object.backgroundLayer ? {
         hasControls: false,
         lockMovementX: true,
@@ -4742,6 +5115,7 @@ export class EditorEngine {
 
   destroy() {
     if (this.saveTimer) window.clearTimeout(this.saveTimer);
+    if (this.textHistoryTimer !== null) window.clearTimeout(this.textHistoryTimer);
     this.adjustmentTimers.forEach((timer) => window.clearTimeout(timer));
     this.adjustmentTimers.clear();
     window.removeEventListener('keydown', this.handleKeyDown);

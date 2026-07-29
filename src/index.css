@@ -1,5 +1,37 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
 
+@font-face {
+  font-family: 'Source Han Sans SC';
+  src: url('@fontpkg/source-han-sans-sc-vf/SourceHanSansSC-VF.ttf.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Source Han Serif SC';
+  src: url('@fontpkg/source-han-serif-sc-vf/SourceHanSerifSC-VF.ttf.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Jiangxi Zhuokai';
+  src: url('@fontpkg/jiangxizhuokai/江西拙楷2.0.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'MiSans';
+  src: url('@fontpkg/mi-sans-vf/MiSans VF.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
 :root {
   font-family: "Inter", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
   color: #0a0a0a;
