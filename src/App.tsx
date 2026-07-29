@@ -546,7 +546,7 @@ function App() {
                 {activeTool === 'polygon-lasso' && '逐点点击轮廓，然后点击右侧“完成并闭合选区”'}
                 {activeTool === 'erase-brush' && '在图片上涂抹以擦除，松开后写入非破坏性蒙版'}
                 {activeTool === 'restore-brush' && '在已擦除区域涂抹，恢复上传时的原图内容'}
-                {activeTool === 'patch' && '先用套索建立修补选区，再拖到附近干净区域取样并自动融合'}
+                {activeTool === 'patch' && '当前图层已锁定；直接拖动框选需要修复的范围，松开后自动识别并融合周围像素'}
                 {activeTool === 'face-retouch' && '先识别人脸建立选区，再调节磨皮与瘦脸强度'}
                 {activeTool === 'liquify' && '在人物轮廓上按住并拖动：向内推可瘦脸瘦身，向外推可恢复或塑形'}
                 {activeTool === 'shapes' && '选择矩形、圆形、三角形或直线；创建后可继续调节圆角、描边和尺寸'}

@@ -606,7 +606,7 @@ function SelectionSection({ engine }: { engine: EditorEngine }) {
           <label><span>不透明度</span><input type="number" min={0} max={100} value={fillOpacity} onChange={(event) => setFillOpacity(Math.max(0, Math.min(100, Number(event.target.value))))} /></label>
           <button type="button" className="secondary-action" onClick={() => void engine.fillPixelSelection(fillColor, fillOpacity / 100)}><PaintBucket size={15} />选区填色</button>
         </div>
-        <button type="button" className="secondary-action" onClick={() => { setTool('patch'); engine.setTool('patch'); }}><Bandage size={15} />使用选区修补</button>
+        <button type="button" className="secondary-action" onClick={() => { setTool('patch'); engine.setTool('patch'); }}><Bandage size={15} />切换自动修补</button>
         <button type="button" className="primary-action" onClick={() => void engine.applySelectionMask()}><Scissors size={15} />{activeTool === 'edge-cutout' ? '确认抠图并生成蒙版' : '生成图层蒙版'}</button>
       </div>
     </section>
@@ -676,18 +676,16 @@ function FaceRetouchSection({ engine }: { engine: EditorEngine }) {
   );
 }
 
-function PatchSection({ engine }: { engine: EditorEngine }) {
-  const setTool = useEditorStore((state) => state.setTool);
+function PatchSection() {
   return (
     <section className="selection-workflow">
       <div className="selection-hero">
         <div className="selection-orb"><Bandage size={18} /></div>
-        <div><strong>修补工具</strong><span>把附近干净像素复制并融合到框选区域</span></div>
+        <div><strong>修补工具</strong><span>只处理当前图层，自动识别框选区域周围的像素</span></div>
       </div>
       <div className="inspector-section">
-        <div className="patch-steps"><span>1</span><p>先用套索框选污点、杂物或需要修复的区域</p><span>2</span><p>切回修补工具，把选区拖到附近干净位置取样</p><span>3</span><p>松开后自动融合，选区会保留供继续修补</p></div>
-        <button type="button" className="secondary-action full-width" onClick={() => { setTool('polygon-lasso'); engine.setTool('polygon-lasso'); }}><ScanLine size={15} />创建多边形修补选区</button>
-        <button type="button" className="secondary-action full-width" onClick={() => { setTool('lasso'); engine.setTool('lasso'); }}><Brush size={15} />创建自由修补选区</button>
+        <div className="patch-steps"><span>1</span><p>先在画布或图层面板选中要处理的图层</p><span>2</span><p>直接拖动框住污点、杂物或需要修复的范围</p><span>3</span><p>松开后自动读取四周像素并融合，可继续框选下一处</p></div>
+        <div className="eraser-note">进入修补工具时会锁定当下选中的图层，不会跳到其他图片。组合图层会自动修补鼠标所在位置的图片内容。</div>
       </div>
     </section>
   );
@@ -1000,7 +998,7 @@ export function PropertiesPanel({
 
   if (isSelectionTool) return <SelectionSection engine={engine} />;
   if (isEraserTool) return <EraserSection engine={engine} />;
-  if (activeTool === 'patch') return <PatchSection engine={engine} />;
+  if (activeTool === 'patch') return <PatchSection />;
   if (activeTool === 'face-retouch') return <FaceRetouchSection engine={engine} />;
   if (activeTool === 'liquify') return <LiquifySection />;
   if (activeTool === 'shapes') return <ShapeLibrarySection engine={engine} />;

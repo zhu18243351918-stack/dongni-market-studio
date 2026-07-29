@@ -341,6 +341,7 @@ export interface EditorObjectMetadata {
   assetId?: string;
   previewAssetId?: string;
   renderAssetId?: string;
+  bakedRasterAssetId?: string;
   maskAssetId?: string;
   originalWidth?: number;
   originalHeight?: number;

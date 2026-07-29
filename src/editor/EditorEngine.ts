@@ -108,6 +108,7 @@ const CUSTOM_PROPERTIES = [
   'assetId',
   'previewAssetId',
   'renderAssetId',
+  'bakedRasterAssetId',
   'maskAssetId',
   'originalWidth',
   'originalHeight',
@@ -469,6 +470,9 @@ export class EditorEngine {
   private liquifyEnd: Point | null = null;
   private patchStart: Point | null = null;
   private patchEnd: Point | null = null;
+  private patchOwner: EditorObject | null = null;
+  private patchOwnerId: string | null = null;
+  private patchTarget: EditorImage | null = null;
   private regionStart: Point | null = null;
   private regionEnd: Point | null = null;
   private freeformShapeDrawing = false;
@@ -1863,7 +1867,16 @@ export class EditorEngine {
     if (selectionAwareTools.includes(this.currentTool) && !selectionAwareTools.includes(tool)) this.clearPixelSelection();
     this.currentTool = tool;
     const activeObject = this.canvas.getActiveObject() as EditorObject | undefined;
-    const imageRequired = [...selectionTools, 'restore-brush', 'patch', 'face-retouch', 'liquify'].includes(tool);
+    if (tool === 'patch') {
+      this.clearPixelSelection();
+      const retainedOwner = activeObject || (this.patchOwnerId ? this.findObject(this.patchOwnerId) : undefined);
+      this.bindPatchTarget(retainedOwner);
+    } else if (this.currentTool !== 'patch') {
+      this.patchOwner = null;
+      this.patchOwnerId = null;
+      this.patchTarget = null;
+    }
+    const imageRequired = [...selectionTools, 'restore-brush', 'face-retouch', 'liquify'].includes(tool);
     const eraseHasTarget = tool === 'erase-brush' && activeObject && (isImageObject(activeObject) || this.isPaintLayer(activeObject));
     if ((imageRequired || (tool === 'erase-brush' && !eraseHasTarget)) && !isImageObject(activeObject)) {
       const editable = this.getEditableObjects().slice().reverse();
@@ -1924,6 +1937,31 @@ export class EditorEngine {
   private isPaintLayer(object: FabricObject | null | undefined): object is EditorObject {
     const editorObject = object as EditorObject | null | undefined;
     return Boolean(editorObject && (editorObject.paintLayer || editorObject.id?.startsWith('brush-') || editorObject.name?.startsWith('画笔')));
+  }
+
+  private collectPatchImages(object: FabricObject | null | undefined): EditorImage[] {
+    if (!object) return [];
+    if (isImageObject(object)) return [object as EditorImage];
+    if (object instanceof Group) return object.getObjects().flatMap((child) => this.collectPatchImages(child));
+    return [];
+  }
+
+  private bindPatchTarget(owner = this.canvas.getActiveObject() as EditorObject | undefined, point?: Point) {
+    if (!owner || owner instanceof ActiveSelection || this.isArtboardObject(owner)) {
+      this.patchOwner = null;
+      this.patchTarget = null;
+      return null;
+    }
+    owner.id ||= createId('layer');
+    const candidates = this.collectPatchImages(owner);
+    const target = point && candidates.length > 1
+      ? candidates.slice().reverse().find((image) => image.containsPoint(point)) || candidates[candidates.length - 1] || null
+      : candidates[candidates.length - 1] || null;
+    this.patchOwner = owner;
+    this.patchOwnerId = owner.id;
+    this.patchTarget = target;
+    if (target) target.id ||= createId('image');
+    return target;
   }
 
   setSelectionOptions(options: Partial<SelectionOptions>) {
@@ -2902,12 +2940,11 @@ export class EditorEngine {
       return;
     }
     if (this.currentTool === 'patch') {
-      if (!this.activeMask) {
-        this.callbacks.onToast('请先用套索或多边形套索框选需要修补的区域', 'error');
-        return;
-      }
-      if (!isImageObject(this.canvas.getActiveObject())) {
-        this.callbacks.onToast('请先选择需要修补的图片图层', 'error');
+      const active = this.canvas.getActiveObject() as EditorObject | undefined;
+      const retainedOwner = this.patchOwnerId ? this.findObject(this.patchOwnerId) : undefined;
+      const target = this.bindPatchTarget(active || retainedOwner || this.patchOwner || undefined, scenePoint);
+      if (!target) {
+        this.callbacks.onToast('请在当前图片图层的内容范围内框选修补区域', 'error');
         return;
       }
       this.isPointerDown = true;
@@ -3053,8 +3090,8 @@ export class EditorEngine {
       const end = this.patchEnd;
       this.patchStart = null;
       this.patchEnd = null;
-      if (start && end && start.distanceFrom(end) > 1 / this.canvas.getZoom()) await this.applyPatchStroke(start, end);
-      else this.callbacks.onToast('请把选区拖到附近的干净取样区域', 'error');
+      if (start && end && start.distanceFrom(end) > 4 / this.canvas.getZoom()) await this.applyAutomaticPatch(start, end);
+      else this.callbacks.onToast('请拖动框选需要修补的范围', 'error');
       this.renderOverlay();
     }
     if (this.currentTool === 'region' && this.isPointerDown) {
@@ -3494,105 +3531,97 @@ export class EditorEngine {
     }
   }
 
-  private async applyPatchStroke(startScene: Point, endScene: Point) {
-    const prepared = await this.prepareWorkImage();
-    if (!prepared || !this.activeMask || prepared.image.id !== this.maskTargetId) {
-      this.callbacks.onToast('修补选区已失效，请重新使用套索框选', 'error');
+  private sceneToImageSourcePixel(image: EditorImage, scenePoint: Point, sourceWidth: number, sourceHeight: number) {
+    const local = util.transformPoint(scenePoint, util.invertTransform(image.calcTransformMatrix()));
+    const element = image.getElement() as HTMLImageElement;
+    const elementWidth = element.naturalWidth || element.width || image.width || sourceWidth;
+    const elementHeight = element.naturalHeight || element.height || image.height || sourceHeight;
+    const cropX = image.cropX || 0;
+    const cropY = image.cropY || 0;
+    const x = Math.round((cropX + local.x + (image.width || elementWidth) / 2) / Math.max(1, elementWidth) * sourceWidth);
+    const y = Math.round((cropY + local.y + (image.height || elementHeight) / 2) / Math.max(1, elementHeight) * sourceHeight);
+    return {
+      x: Math.max(0, Math.min(sourceWidth - 1, x)),
+      y: Math.max(0, Math.min(sourceHeight - 1, y)),
+    };
+  }
+
+  private async applyAutomaticPatch(startScene: Point, endScene: Point) {
+    const image = this.patchTarget;
+    const owner = this.patchOwner;
+    if (!image || !owner) {
+      this.callbacks.onToast('当前图层没有可修补的像素内容', 'error');
       return;
     }
-    const start = await this.sceneToWorkPixel(startScene);
-    const end = await this.sceneToWorkPixel(endScene);
-    if (!start || !end) {
-      this.callbacks.onToast('请在同一张图片内拖到干净的取样区域', 'error');
-      return;
-    }
-    const image = prepared.image;
-    this.callbacks.onProcessing(true, '正在融合周围像素…');
+    this.callbacks.onProcessing(true, '正在识别并融合周围像素…');
     try {
-      const source = await imageFromUrl(image.getSrc());
-      const width = source.naturalWidth || source.width;
-      const height = source.naturalHeight || source.height;
-      const output = document.createElement('canvas');
-      output.width = width;
-      output.height = height;
-      const outputContext = output.getContext('2d');
-      if (!outputContext) throw new Error('无法处理修补区域');
-      outputContext.drawImage(source, 0, 0, width, height);
-
-      const scaleX = width / this.activeMask.width;
-      const scaleY = height / this.activeMask.height;
-      const offsetX = (end.x - start.x) * scaleX;
-      const offsetY = (end.y - start.y) * scaleY;
-      const smallMask = document.createElement('canvas');
-      smallMask.width = this.activeMask.width;
-      smallMask.height = this.activeMask.height;
-      const smallMaskContext = smallMask.getContext('2d');
-      if (!smallMaskContext) throw new Error('无法读取修补选区');
-      const maskPixels = smallMaskContext.createImageData(smallMask.width, smallMask.height);
-      for (let index = 0; index < this.activeMask.data.length; index += 1) {
-        const offset = index * 4;
-        maskPixels.data[offset] = 255;
-        maskPixels.data[offset + 1] = 255;
-        maskPixels.data[offset + 2] = 255;
-        maskPixels.data[offset + 3] = this.activeMask.data[index];
+      const baseDescriptorId = image.renderAssetId || image.bakedRasterAssetId || image.assetId;
+      const baseDescriptor = baseDescriptorId ? this.assets.find((asset) => asset.id === baseDescriptorId) : undefined;
+      const blob = baseDescriptor
+        ? await this.assetStore.createBlob(baseDescriptor)
+        : await (await fetch(image.getSrc())).blob();
+      const sourceWidth = baseDescriptor?.width || (image.getElement() as HTMLImageElement).naturalWidth || image.width || 1;
+      const sourceHeight = baseDescriptor?.height || (image.getElement() as HTMLImageElement).naturalHeight || image.height || 1;
+      const start = this.sceneToImageSourcePixel(image, startScene, sourceWidth, sourceHeight);
+      const end = this.sceneToImageSourcePixel(image, endScene, sourceWidth, sourceHeight);
+      const left = Math.max(0, Math.min(start.x, end.x));
+      const top = Math.max(0, Math.min(start.y, end.y));
+      const right = Math.min(sourceWidth, Math.max(start.x, end.x) + 1);
+      const bottom = Math.min(sourceHeight, Math.max(start.y, end.y) + 1);
+      if (right - left < 2 || bottom - top < 2) {
+        this.callbacks.onToast('修补范围太小，请重新框选', 'error');
+        return;
       }
-      smallMaskContext.putImageData(maskPixels, 0, 0);
-
-      const fullMask = document.createElement('canvas');
-      fullMask.width = width;
-      fullMask.height = height;
-      const fullMaskContext = fullMask.getContext('2d');
-      if (!fullMaskContext) throw new Error('无法融合修补边缘');
-      fullMaskContext.filter = `blur(${Math.max(1, Math.round(Math.max(scaleX, scaleY) * 2))}px)`;
-      fullMaskContext.drawImage(smallMask, 0, 0, width, height);
-
-      const sampled = document.createElement('canvas');
-      sampled.width = width;
-      sampled.height = height;
-      const sampledContext = sampled.getContext('2d');
-      if (!sampledContext) throw new Error('无法创建修补图层');
-      sampledContext.drawImage(source, -offsetX, -offsetY, width, height);
-      sampledContext.globalCompositeOperation = 'destination-in';
-      sampledContext.drawImage(fullMask, 0, 0);
-      outputContext.drawImage(sampled, 0, 0);
-
-      const dataUrl = output.toDataURL('image/png');
-      let nextSource = dataUrl;
-      if (image.assetId) {
-        const blob = await (await fetch(dataUrl)).blob();
-        const descriptor = await this.assetStore.putStream(blob, {
-          name: `${image.name || '图片'}-patch`,
+      const result = await rasterWorkerBroker.run<{ blob: Blob; width: number; height: number }>({
+        type: 'heal',
+        blob,
+        rect: { x: left, y: top, width: right - left, height: bottom - top },
+        outputType: 'image/png',
+        quality: 1,
+      });
+      let nextSource = await blobToDataUrl(result.blob);
+      if (image.assetId || baseDescriptor) {
+        const descriptor = await this.assetStore.putStream(result.blob, {
+          name: `${image.name || '图片'}-heal`,
           mimeType: 'image/png',
           kind: 'derived',
-          width,
-          height,
-          sourceAssetId: image.assetId,
+          width: result.width,
+          height: result.height,
+          sourceAssetId: baseDescriptor?.id || image.assetId,
         });
         this.assets = await this.assetStore.list();
         nextSource = await this.assetStore.createObjectUrl(descriptor);
         this.objectUrls.add(nextSource);
+        image.bakedRasterAssetId = descriptor.id;
+        image.previewAssetId = descriptor.id;
         image.renderAssetId = descriptor.id;
-        image.renderObjectUrl = nextSource;
       }
+      const oldRenderUrl = image.renderObjectUrl;
+      const dimensions = { width: image.width, height: image.height, scaleX: image.scaleX, scaleY: image.scaleY };
       await image.setSrc(nextSource);
+      image.set(dimensions);
+      image.renderObjectUrl = nextSource.startsWith('blob:') ? nextSource : undefined;
       image.beautyBaseSrc = nextSource;
+      image.adjustments = { ...DEFAULT_ADJUSTMENTS };
       image.setCoords();
-
-      const workCanvas = document.createElement('canvas');
-      workCanvas.width = this.activeMask.width;
-      workCanvas.height = this.activeMask.height;
-      const workContext = workCanvas.getContext('2d', { willReadFrequently: true });
-      if (workContext) {
-        workContext.drawImage(output, 0, 0, workCanvas.width, workCanvas.height);
-        this.workImageData = workContext.getImageData(0, 0, workCanvas.width, workCanvas.height);
+      owner.dirty = true;
+      owner.setCoords();
+      if (oldRenderUrl && oldRenderUrl !== nextSource) {
+        URL.revokeObjectURL(oldRenderUrl);
+        this.objectUrls.delete(oldRenderUrl);
       }
-      this.canvas.setActiveObject(image);
+      if (this.maskTargetId === image.id) {
+        this.workImageData = null;
+        this.activeMask = null;
+        this.previewCanvas = null;
+      }
+      this.canvas.setActiveObject(owner);
       this.canvas.requestRenderAll();
       this.syncSelection();
       this.commitHistory();
-      this.callbacks.onToast('修补完成，选区仍保留，可继续取样或撤销', 'success');
-    } catch {
-      this.callbacks.onToast('修补失败，原图未被修改', 'error');
+      this.callbacks.onToast('修补完成，可继续框选其他区域或撤销', 'success');
+    } catch (error) {
+      if ((error as Error).name !== 'AbortError') this.callbacks.onToast('修补失败，原图未被修改', 'error');
     } finally {
       this.callbacks.onProcessing(false);
     }
@@ -4231,23 +4260,17 @@ export class EditorEngine {
     if (this.patchStart && this.patchEnd) {
       const start = util.transformPoint(this.patchStart, viewport);
       const end = util.transformPoint(this.patchEnd, viewport);
-      const angle = Math.atan2(end.y - start.y, end.x - start.x);
+      const left = Math.min(start.x, end.x);
+      const top = Math.min(start.y, end.y);
+      const width = Math.abs(end.x - start.x);
+      const height = Math.abs(end.y - start.y);
       context.save();
       context.setLineDash([6, 4]);
       context.strokeStyle = '#f97316';
-      context.fillStyle = '#f97316';
+      context.fillStyle = 'rgba(249, 115, 22, 0.14)';
       context.lineWidth = 2;
-      context.beginPath();
-      context.moveTo(start.x, start.y);
-      context.lineTo(end.x, end.y);
-      context.stroke();
-      context.setLineDash([]);
-      context.beginPath();
-      context.moveTo(end.x, end.y);
-      context.lineTo(end.x - Math.cos(angle - Math.PI / 6) * 10, end.y - Math.sin(angle - Math.PI / 6) * 10);
-      context.lineTo(end.x - Math.cos(angle + Math.PI / 6) * 10, end.y - Math.sin(angle + Math.PI / 6) * 10);
-      context.closePath();
-      context.fill();
+      context.fillRect(left, top, width, height);
+      context.strokeRect(left, top, width, height);
       context.restore();
     }
     if (this.brushCursorPoint && this.isCircularBrushTool() && !this.spacePressed) {
@@ -4902,23 +4925,26 @@ export class EditorEngine {
         const isArtboard = typeof record.id === 'string' && record.id.startsWith(ARTBOARD_PREFIX);
         record.visible = isTarget ? (isArtboard ? true : (record.lazyVisible ?? record.visible ?? true)) : false;
       }
-      if ((record.type === 'Image' || record.type === 'image') && typeof record.assetId === 'string') {
-        const original = this.assets.find((asset) => asset.id === record.assetId
+      if ((record.type === 'Image' || record.type === 'image') && (typeof record.assetId === 'string' || typeof record.bakedRasterAssetId === 'string')) {
+        const baked = typeof record.bakedRasterAssetId === 'string'
+          ? this.assets.find((asset) => asset.id === record.bakedRasterAssetId)
+          : undefined;
+        const original = typeof record.assetId === 'string' ? this.assets.find((asset) => asset.id === record.assetId
           && asset.mimeType.startsWith('image/')
           && asset.mimeType !== 'image/vnd.adobe.photoshop'
-          && !['image/tiff', 'image/x-tiff'].includes(asset.mimeType));
+          && !['image/tiff', 'image/x-tiff'].includes(asset.mimeType)) : undefined;
         const fallbackId = typeof record.renderAssetId === 'string' ? record.renderAssetId : typeof record.previewAssetId === 'string' ? record.previewAssetId : undefined;
         const fallback = fallbackId ? this.assets.find((asset) => asset.id === fallbackId) : undefined;
-        const descriptor = original || fallback;
+        const descriptor = baked || original || fallback;
         if (descriptor) {
           let blob = await this.assetStore.createBlob(descriptor);
           const adjustments = record.adjustments as ImageAdjustments | undefined;
           const hasAdjustments = adjustments && Object.values(adjustments).some((value) => Number(value) !== 0);
-          if (original && hasAdjustments) {
+          if ((baked || original) && hasAdjustments) {
             const filtered = await rasterWorkerBroker.run<{ blob: Blob }>({ type: 'filter', blob, adjustments, outputType: descriptor.mimeType === 'image/png' ? 'image/png' : 'image/webp', quality: .96 });
             blob = filtered.blob;
           }
-          if (original && typeof record.maskAssetId === 'string') {
+          if ((baked || original) && typeof record.maskAssetId === 'string') {
             const maskDescriptor = this.assets.find((asset) => asset.id === record.maskAssetId);
             if (maskDescriptor) {
               const mask = await this.assetStore.createBlob(maskDescriptor);
@@ -4930,7 +4956,7 @@ export class EditorEngine {
           urls.push(url);
           const previewWidth = Number(record.width || descriptor.width || 1);
           const previewHeight = Number(record.height || descriptor.height || 1);
-          if (descriptor.width && descriptor.height && original) {
+          if (descriptor.width && descriptor.height && (baked || original)) {
             record.width = descriptor.width;
             record.height = descriptor.height;
             record.scaleX = Number(record.scaleX || 1) * previewWidth / descriptor.width;
