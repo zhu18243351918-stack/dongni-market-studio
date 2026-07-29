@@ -902,7 +902,7 @@ export class EditorEngine {
       add(rect(125, 820, 360, 82, '#fff7ed', 41), '行动按钮');
       add(text('立即观看  →', 125, 840, 360, 31, '#111827', '600', 'center'), '按钮文字');
     } else if (templateId === 'product-main') {
-      add(rect(70, 70, 940, 940, '#ffffff', 42), '商品卡片');
+      add(rect(0, 0, 1080, 1080, '#ffffff'), '商品卡片');
       const placeholder = rect(180, 175, 720, 590, '#f3f4f6', 32);
       placeholder.set({ stroke: '#9ca3af', strokeDashArray: [14, 10], strokeWidth: 2 });
       add(placeholder, '商品图片占位');
@@ -923,7 +923,7 @@ export class EditorEngine {
       add(rect(90, 1155, 390, 95, '#fff7ed', 48), '报名按钮');
       add(text('立即报名', 90, 1180, 390, 35, '#172554', '600', 'center'), '报名文字');
     } else if (templateId === 'meme') {
-      add(rect(55, 55, 970, 970, '#ffffff', 28), '表情包卡片');
+      add(rect(0, 0, 1080, 1080, '#ffffff'), '表情包卡片');
       const placeholder = rect(105, 225, 870, 625, '#e5e7eb', 14);
       placeholder.set({ stroke: '#111827', strokeWidth: 3 });
       add(placeholder, '表情图片占位');
@@ -1651,9 +1651,10 @@ export class EditorEngine {
     image.adjustments = { ...DEFAULT_ADJUSTMENTS };
     image.artboardId = this.activeArtboardId;
     const artboard = this.getActiveArtboard() || { x: 0, y: 0, width: this.documentWidth, height: this.documentHeight };
-    const maxWidth = this.documentWidth * 0.82;
-    const maxHeight = this.documentHeight * 0.82;
-    const scale = Math.min(1, maxWidth / (image.width || 1), maxHeight / (image.height || 1));
+    const scale = Math.min(
+      artboard.width / (image.width || 1),
+      artboard.height / (image.height || 1),
+    );
     image.set({
       left: artboard.x + artboard.width / 2,
       top: artboard.y + artboard.height / 2,
