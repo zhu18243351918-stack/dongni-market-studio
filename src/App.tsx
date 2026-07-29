@@ -21,6 +21,8 @@ import {
   Trash2,
   WandSparkles,
   RotateCcw,
+  Undo2,
+  Redo2,
   Sparkles,
   Move,
   LayoutTemplate,
@@ -130,6 +132,8 @@ function App() {
   const mobilePanel = useEditorStore((state) => state.mobilePanel);
   const setMobilePanel = useEditorStore((state) => state.setMobilePanel);
   const selectedId = useEditorStore((state) => state.selectedId);
+  const canUndo = useEditorStore((state) => state.canUndo);
+  const canRedo = useEditorStore((state) => state.canRedo);
   const layers = useEditorStore((state) => state.layers);
   const zoom = useEditorStore((state) => state.zoom);
   const isProcessing = useEditorStore((state) => state.isProcessing);
@@ -402,7 +406,7 @@ function App() {
     const opensInspector = ['edge-cutout', 'quick-select', 'magic-wand', 'lasso', 'polygon-lasso', 'erase-brush', 'restore-brush', 'patch', 'face-retouch', 'liquify', 'shapes', 'templates', 'filters', 'styles', 'region', 'workflow'].includes(tool);
     if (opensInspector) {
       setRightTab('properties');
-      setMobilePanel(window.matchMedia('(max-width: 767px)').matches ? 'properties' : null);
+      setMobilePanel(window.matchMedia('(max-width: 767px), (max-width: 900px) and (pointer: coarse)').matches ? 'properties' : null);
     } else {
       setMobilePanel(null);
     }
@@ -553,6 +557,10 @@ function App() {
                 {activeTool === 'workflow' && '自由组合画板、滤镜、区域文字和导出步骤，然后一键执行'}
                 {!['edge-cutout', 'quick-select', 'magic-wand', 'lasso', 'polygon-lasso', 'erase-brush', 'restore-brush', 'patch', 'face-retouch', 'liquify', 'shapes', 'templates', 'filters', 'styles', 'region', 'workflow'].includes(activeTool) && '所有编辑均在本机完成，图片不会上传'}
               </span>
+              <div className="mobile-history-actions" aria-label="撤销与重做">
+                <button type="button" aria-label="撤销" disabled={!canUndo} onClick={() => void engine?.undo()}><Undo2 size={17} /></button>
+                <button type="button" aria-label="重做" disabled={!canRedo} onClick={() => void engine?.redo()}><Redo2 size={17} /></button>
+              </div>
             </div>
             <div className="document-tabs-bar" role="tablist" aria-label="打开的文件">
               <div className="document-tabs-scroll">

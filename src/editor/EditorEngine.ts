@@ -3973,7 +3973,7 @@ export class EditorEngine {
   }
 
   fitToScreen() {
-    const padding = 72;
+    const padding = this.canvas.getWidth() < 768 ? 28 : 72;
     const bounds = this.getSceneBounds();
     const zoom = Math.min(
       (this.canvas.getWidth() - padding * 2) / bounds.width,
@@ -3991,7 +3991,7 @@ export class EditorEngine {
   focusArtboard(id = this.activeArtboardId) {
     const artboard = this.artboards.find((item) => item.id === id);
     if (!artboard) return;
-    const padding = 86;
+    const padding = this.canvas.getWidth() < 768 ? 32 : 86;
     const zoom = Math.min(
       (this.canvas.getWidth() - padding * 2) / artboard.width,
       (this.canvas.getHeight() - padding * 2) / artboard.height,

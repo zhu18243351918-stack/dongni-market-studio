@@ -223,7 +223,7 @@ export function TopBar({ engine, documents, activeDocumentId, onSwitchDocument, 
       <button type="button" className="theme-toggle" aria-label="切换主题" onClick={toggleTheme}>
         {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
       </button>
-      <button type="button" className="export-button" onClick={onExport}><span className="export-grid-icon"><i /><i /><i /><i /></span><span>导出作品</span></button>
+      <button type="button" className="export-button" aria-label="导出作品" onClick={onExport}><span className="export-grid-icon"><i /><i /><i /><i /></span><span>导出作品</span></button>
       <Dialog.Root open={Boolean(pendingFile)} onOpenChange={(open) => { if (!open && !importing) { setPendingFile(null); setPreflight(null); } }}>
         <Dialog.Portal>
           <Dialog.Overlay className="dialog-overlay" />
