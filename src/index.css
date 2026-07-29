@@ -19,6 +19,8 @@
   --accent: #0a0a0a;
   --accent-strong: #0a0a0a;
   --accent-soft: rgba(0, 0, 0, 0.065);
+  --brand-orange: #f97316;
+  --brand-orange-soft: rgba(249, 115, 22, 0.12);
   --danger: #d92d4c;
   --success: #168a52;
   --shadow: 0 24px 80px rgba(0, 0, 0, 0.12);
@@ -83,8 +85,9 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  color: var(--brand-paper);
-  background: var(--brand-ink);
+  color: var(--brand-orange);
+  background: var(--brand-orange-soft);
+  border: 1px solid rgba(249, 115, 22, 0.2);
 }
 .system-brand__mark svg { width: 56%; height: 56%; display: block; transform: none; }
 .system-brand__copy { display: inline-flex; align-items: baseline; gap: var(--brand-copy-gap); }
