@@ -1,0 +1,37 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-desktop
+dist-ssr
+*.local
+src-tauri/target
+
+# Local environment files may contain Supabase project credentials.
+.env
+.env.*
+!.env.example
+!.env.development
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Legacy local preview launchers/assets are kept on this computer but are not published.
+启动东尼图王.bat
+启动图研.bat
+图研-Studio-预览.png

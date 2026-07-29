@@ -1,0 +1,63 @@
+name: Release Windows
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      VITE_AUTH_REDIRECT_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+      VITE_GITHUB_REPOSITORY: ${{ github.repository }}
+      VITE_REQUIRE_AUTH_CONFIG: "true"
+      VITE_APP_TARGET: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sync package version with tag
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          if ($version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') { throw "Release tag must look like v0.1.0" }
+          $package = Get-Content package.json -Raw | ConvertFrom-Json
+          $package.version = $version
+          $package | ConvertTo-Json -Depth 100 | Set-Content package.json -Encoding utf8NoBOM
+          $tauri = Get-Content src-tauri\tauri.conf.json -Raw | ConvertFrom-Json
+          $tauri.version = $version
+          $tauri | ConvertTo-Json -Depth 100 | Set-Content src-tauri\tauri.conf.json -Encoding utf8NoBOM
+          $cargo = Get-Content src-tauri\Cargo.toml -Raw
+          $cargo = $cargo -replace '(?m)^version = "[^"]+"', "version = `"$version`""
+          Set-Content src-tauri\Cargo.toml $cargo -Encoding utf8NoBOM
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm tauri build
+      - name: Collect installer and portable executable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release | Out-Null
+          $portable = Get-ChildItem src-tauri\target\release -Filter dongni-market-studio.exe | Select-Object -First 1
+          if (-not $portable) { throw "Portable executable not found" }
+          Copy-Item $portable.FullName release\Dongni-Market-Studio-Portable-x64.exe
+          $installer = Get-ChildItem src-tauri\target\release\bundle\nsis -Filter *.exe | Select-Object -First 1
+          if (-not $installer) { throw "NSIS installer not found" }
+          Copy-Item $installer.FullName release\Dongni-Market-Studio-Setup-x64.exe
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            release/Dongni-Market-Studio-Setup-x64.exe
+            release/Dongni-Market-Studio-Portable-x64.exe

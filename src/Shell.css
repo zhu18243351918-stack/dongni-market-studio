@@ -1,0 +1,108 @@
+.public-site, .auth-page, .app-boot-screen { min-height: 100dvh; color: #0a0a0a; background: #f7f7f5; }
+.public-site { display: flex; flex-direction: column; overflow-x: hidden; }
+.public-nav { height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 0 clamp(18px,4vw,58px); border-bottom: 1px solid rgba(0,0,0,.08); }
+.public-brand, .auth-brand { display: inline-flex; align-items: center; gap: 10px; color: #090909; }
+.public-brand > span, .auth-brand > span { width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; color: #fff; background: #090909; }
+.public-brand strong, .auth-brand strong { font-size: 13px; letter-spacing: -.02em; }
+.public-nav > div { display: flex; align-items: center; gap: 8px; }
+.public-nav a, .public-nav > div button { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 15px; border: 1px solid rgba(0,0,0,.13); border-radius: 999px; color: rgba(0,0,0,.62); font-size: 11px; }
+.public-nav > div button { color: #fff; border-color: #090909; background: #090909; }
+.public-hero { min-height: calc(100dvh - 190px); display: grid; grid-template-columns: minmax(0,.82fr) minmax(420px,1.18fr); align-items: center; gap: clamp(32px,6vw,92px); padding: clamp(54px,8vw,116px) clamp(20px,6vw,86px); }
+.public-hero-copy { display: grid; justify-items: start; }
+.public-kicker { display: inline-flex; align-items: center; gap: 8px; color: rgba(0,0,0,.5); font-size: 11px; }
+.public-kicker i { width: 8px; height: 8px; border-radius: 50%; background: #090909; }
+.public-hero h1 { margin: 24px 0 22px; font-size: clamp(48px,6.2vw,92px); font-weight: 300; letter-spacing: -.065em; line-height: .94; }
+.public-hero-copy > p { max-width: 620px; margin: 0; color: rgba(0,0,0,.53); font-size: clamp(14px,1.5vw,18px); line-height: 1.65; }
+.public-hero-actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 32px; }
+.public-hero-actions button, .public-hero-actions a { min-height: 46px; display: inline-flex; align-items: center; gap: 8px; padding: 0 20px; border-radius: 999px; font-size: 12px; }
+.public-hero-actions button { color: #fff; background: #090909; }
+.public-hero-actions a { border: 1px solid rgba(0,0,0,.24); color: rgba(0,0,0,.7); }
+.public-trust { display: flex; flex-wrap: wrap; gap: 17px; margin-top: 22px; color: rgba(0,0,0,.42); font-size: 10px; }
+.public-trust span { display: inline-flex; align-items: center; gap: 5px; }
+.public-product-card { min-width: 0; overflow: hidden; border: 1px solid rgba(0,0,0,.12); border-radius: 28px; background: rgba(255,255,255,.9); box-shadow: 0 34px 100px rgba(0,0,0,.12); transform: rotate(-1.2deg); }
+.product-window-bar { height: 47px; display: flex; align-items: center; gap: 6px; padding: 0 16px; border-bottom: 1px solid rgba(0,0,0,.08); }
+.product-window-bar > span { width: 8px; height: 8px; border-radius: 50%; background: #d0d0d0; }
+.product-window-bar small { margin-left: 8px; color: rgba(0,0,0,.4); font-size: 9px; }
+.product-window-body { height: min(50vw,500px); min-height: 350px; display: grid; grid-template-columns: 52px minmax(0,1fr) 150px; }
+.product-window-body > aside { display: flex; flex-direction: column; align-items: center; gap: 22px; padding-top: 17px; color: rgba(0,0,0,.45); border-right: 1px solid rgba(0,0,0,.07); }
+.product-window-body > aside svg:first-child { color: #fff; padding: 7px; box-sizing: content-box; border-radius: 50%; background: #090909; }
+.product-canvas { display: flex; align-items: center; justify-content: center; padding: 35px; background-color: #ececed; background-image: radial-gradient(circle,rgba(0,0,0,.13) 1px,transparent 1px); background-size: 18px 18px; }
+.product-artboard { position: relative; width: min(88%,430px); aspect-ratio: 4/3; overflow: hidden; background: #fff; box-shadow: 0 18px 50px rgba(0,0,0,.12); }
+.product-artboard > span { position: absolute; top: -24px; left: 0; color: rgba(0,0,0,.45); font-size: 9px; }
+.product-shape { position: absolute; width: 48%; aspect-ratio: 1; right: 8%; top: 12%; border-radius: 50%; background: #f97316; }
+.product-copy { position: absolute; left: 9%; bottom: 17%; width: 55%; display: grid; gap: 8px; }
+.product-copy i { height: 8px; border-radius: 999px; background: #111; }
+.product-copy i:nth-child(2) { width: 82%; opacity: .35; }
+.product-copy i:nth-child(3) { width: 62%; opacity: .18; }
+.product-window-body > section { display: grid; align-content: start; gap: 12px; padding: 17px 13px; border-left: 1px solid rgba(0,0,0,.07); }
+.product-window-body > section strong { font-size: 10px; }
+.product-window-body > section div { height: 44px; border-radius: 9px; background: #f0f0f2; }
+.product-window-body > section small { margin-top: auto; color: rgba(0,0,0,.35); font-size: 8px; }
+.public-feature-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; margin: 0 clamp(20px,6vw,86px) 60px; overflow: hidden; border: 1px solid rgba(0,0,0,.09); border-radius: 22px; background: rgba(0,0,0,.09); }
+.public-feature-row article { min-height: 150px; display: grid; align-content: center; gap: 8px; padding: 28px; background: #fff; }
+.public-feature-row strong { font-size: 13px; }
+.public-feature-row span { color: rgba(0,0,0,.48); font-size: 10px; line-height: 1.55; }
+.public-footer { height: 62px; display: flex; align-items: center; justify-content: space-between; padding: 0 clamp(20px,6vw,86px); border-top: 1px solid rgba(0,0,0,.08); color: rgba(0,0,0,.5); font-size: 10px; }
+.public-footer span, .public-footer a { display: inline-flex; align-items: center; gap: 7px; }
+
+.auth-page { position: relative; display: grid; place-items: center; padding: 88px 18px 40px; background-image: radial-gradient(circle at 50% 25%,rgba(249,115,22,.13),transparent 31%),radial-gradient(circle,rgba(0,0,0,.09) 1px,transparent 1px); background-size: auto,22px 22px; }
+.auth-brand { position: absolute; top: 22px; left: 28px; }
+.auth-layout { width: min(1040px,100%); display: grid; grid-template-columns: minmax(0,1.18fr) minmax(390px,.82fr); align-items: stretch; gap: 20px; }
+.auth-version-visual { min-width: 0; margin: 0; overflow: hidden; border: 1px solid rgba(0,0,0,.1); border-radius: 28px; background: #ececea; box-shadow: 0 30px 100px rgba(0,0,0,.1); }
+.auth-version-visual img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.auth-card { width: 100%; padding: 28px; border: 1px solid rgba(0,0,0,.12); border-radius: 25px; background: rgba(255,255,255,.94); box-shadow: 0 30px 100px rgba(0,0,0,.12); backdrop-filter: blur(20px); }
+.auth-card-heading { display: flex; gap: 12px; align-items: flex-start; }
+.auth-card-heading > span { width: 38px; height: 38px; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; color: #fff; background: #090909; }
+.auth-card-heading h1 { margin: 1px 0 4px; font-size: 19px; font-weight: 550; letter-spacing: -.03em; }
+.auth-card-heading p { margin: 0; color: rgba(0,0,0,.48); font-size: 10px; }
+.auth-card form { display: grid; gap: 13px; margin-top: 24px; }
+.auth-card label { display: grid; gap: 6px; }
+.auth-card label span { color: rgba(0,0,0,.55); font-size: 10px; }
+.auth-card input { height: 44px; padding: 0 13px; border: 1px solid rgba(0,0,0,.14); border-radius: 11px; outline: 0; background: #f7f7f8; color: #111; font-size: 12px; }
+.auth-card input:focus { border-color: #090909; box-shadow: 0 0 0 3px rgba(0,0,0,.07); }
+.auth-submit { min-height: 45px; margin-top: 3px; border-radius: 999px; color: #fff; background: #090909; font-size: 11px; font-weight: 600; }
+.auth-submit:disabled { opacity: .4; }
+.auth-links { display: flex; justify-content: center; gap: 18px; margin-top: 17px; }
+.auth-links button { color: rgba(0,0,0,.5); font-size: 10px; }
+.auth-links button:hover { color: #090909; }
+.auth-privacy { display: block; margin-top: 23px; padding-top: 16px; border-top: 1px solid rgba(0,0,0,.08); color: rgba(0,0,0,.35); text-align: center; font-size: 8px; line-height: 1.5; }
+.auth-message, .auth-config-error, .auth-development-note { padding: 10px 11px; border-radius: 10px; font-size: 9px; line-height: 1.5; }
+.auth-message.error, .auth-config-error { color: #b42318; border: 1px solid rgba(180,35,24,.18); background: rgba(180,35,24,.07); }
+.auth-message.success { color: #087443; border: 1px solid rgba(8,116,67,.18); background: rgba(8,116,67,.07); }
+.auth-config-error { display: grid; gap: 2px; margin-top: 18px; }
+.auth-development-note { margin-top: 18px; color: #8a5500; border: 1px solid rgba(245,158,11,.2); background: rgba(245,158,11,.08); }
+.app-boot-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
+.app-boot-screen svg { padding: 10px; box-sizing: content-box; border-radius: 50%; color: #fff; background: #090909; }
+.app-boot-screen strong { font-size: 11px; font-weight: 500; }
+
+@media (max-width: 900px) {
+  .public-nav a { display: none; }
+  .public-hero { grid-template-columns: 1fr; padding-top: 70px; }
+  .public-product-card { transform: none; }
+  .product-window-body { height: 430px; }
+  .public-feature-row { grid-template-columns: 1fr; }
+  .auth-layout { width: min(560px,100%); grid-template-columns: 1fr; }
+  .auth-version-visual { max-height: 310px; }
+}
+
+@media (max-width: 560px) {
+  .public-nav { height: 62px; padding: 0 14px; }
+  .public-nav > div button { min-height: 36px; padding: 0 12px; }
+  .public-hero { min-height: auto; padding: 56px 17px 36px; }
+  .public-hero h1 { font-size: clamp(42px,14vw,62px); }
+  .public-hero-actions { display: grid; width: 100%; }
+  .public-hero-actions button, .public-hero-actions a { justify-content: center; }
+  .public-trust { gap: 10px; }
+  .public-product-card { border-radius: 18px; }
+  .product-window-body { height: 300px; min-height: 0; grid-template-columns: 40px minmax(0,1fr); }
+  .product-window-body > section { display: none; }
+  .product-canvas { padding: 20px; }
+  .public-feature-row { margin: 0 17px 34px; border-radius: 17px; }
+  .public-feature-row article { min-height: 130px; }
+  .public-footer { padding: 0 17px; }
+  .auth-page { padding-top: 82px; }
+  .auth-brand { top: 18px; left: 18px; }
+  .auth-layout { gap: 12px; }
+  .auth-version-visual { max-height: 220px; border-radius: 20px; }
+  .auth-card { padding: 22px 18px; border-radius: 20px; }
+}
