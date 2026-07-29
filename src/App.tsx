@@ -79,6 +79,24 @@ const tools: Array<{ id: ToolId; label: string; shortcut?: string; icon: typeof 
 
 const toolNames = Object.fromEntries(tools.map((tool) => [tool.id, tool.label])) as Record<ToolId, string>;
 
+const mobileQuickActions: Array<{
+  id: string;
+  label: string;
+  icon: typeof MousePointer2;
+  tool?: ToolId;
+  panel?: 'tools' | 'properties';
+}> = [
+  { id: 'templates', label: '模板', icon: LayoutTemplate, tool: 'templates' },
+  { id: 'crop', label: '裁剪', icon: Crop, tool: 'crop' },
+  { id: 'cutout', label: '抠图', icon: Scissors, tool: 'edge-cutout' },
+  { id: 'adjust', label: '调色', icon: SlidersHorizontal, panel: 'properties' },
+  { id: 'filters', label: '滤镜', icon: Palette, tool: 'filters' },
+  { id: 'erase', label: '消除笔', icon: Eraser, tool: 'erase-brush' },
+  { id: 'text', label: '文字', icon: TextCursorInput, tool: 'text' },
+  { id: 'beauty', label: '美颜', icon: Sparkles, tool: 'face-retouch' },
+  { id: 'more', label: '更多', icon: Plus, panel: 'tools' },
+];
+
 function App() {
   const reduceMotion = useReducedMotion();
   const auth = useAuth();
@@ -387,6 +405,19 @@ function App() {
     }
   }, [engine, setMobilePanel, setRightTab, setTool]);
 
+  const chooseMobileQuickAction = useCallback((action: (typeof mobileQuickActions)[number]) => {
+    if (action.panel === 'tools') {
+      setMobilePanel('tools');
+      return;
+    }
+    if (action.panel === 'properties') {
+      setRightTab('properties');
+      setMobilePanel('properties');
+      return;
+    }
+    if (action.tool) chooseTool(action.tool);
+  }, [chooseTool, setMobilePanel, setRightTab]);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
@@ -478,7 +509,7 @@ function App() {
             className={`tool-rail ${mobilePanel === 'tools' ? 'is-mobile-open' : ''}`}
             aria-label="编辑工具"
           >
-            <div className="mobile-sheet-header"><strong>编辑工具</strong><button type="button" onClick={() => setMobilePanel(null)}><X size={18} /></button></div>
+            <div className="mobile-sheet-header"><strong>全部工具</strong><button type="button" aria-label="关闭全部工具" onClick={() => setMobilePanel(null)}><X size={18} /></button></div>
             <div className="tool-list">
               {groupedTools.map((item, index) => item === 'separator' ? <div className="tool-separator" key={`separator-${index}`} /> : (
                 <div className="tool-item-wrap" key={item.id}>
@@ -589,12 +620,21 @@ function App() {
           </aside>
         </motion.main>
 
-        <nav className="mobile-bottom-nav" aria-label="移动端操作">
-          <button type="button" className={mobilePanel === 'tools' ? 'is-active' : ''} onClick={() => setMobilePanel(mobilePanel === 'tools' ? null : 'tools')}><Scissors size={19} /><span>工具</span></button>
-          <button type="button" className={mobilePanel === 'properties' ? 'is-active' : ''} onClick={() => setMobilePanel(mobilePanel === 'properties' ? null : 'properties')}><PanelRight size={19} /><span>属性</span></button>
-          <button type="button" className={mobilePanel === 'layers' ? 'is-active' : ''} onClick={() => setMobilePanel(mobilePanel === 'layers' ? null : 'layers')}><Layers3 size={19} /><span>图层</span></button>
-          <button type="button" onClick={() => setExportOpen(true)}><Download size={19} /><span>导出</span></button>
-        </nav>
+        <div className="mobile-command-dock">
+          <nav className="mobile-quick-tools" aria-label="常用图片功能">
+            {mobileQuickActions.map((action) => {
+              const Icon = action.icon;
+              const active = Boolean(action.tool && activeTool === action.tool) || Boolean(action.panel && mobilePanel === action.panel);
+              return <button type="button" key={action.id} className={active ? 'is-active' : ''} onClick={() => chooseMobileQuickAction(action)}><Icon size={21} strokeWidth={1.8} /><span>{action.label}</span></button>;
+            })}
+          </nav>
+          <nav className="mobile-bottom-nav" aria-label="移动端操作">
+            <button type="button" className={mobilePanel === 'tools' ? 'is-active' : ''} onClick={() => setMobilePanel(mobilePanel === 'tools' ? null : 'tools')}><Scissors size={19} /><span>全部工具</span></button>
+            <button type="button" className={mobilePanel === 'properties' ? 'is-active' : ''} onClick={() => setMobilePanel(mobilePanel === 'properties' ? null : 'properties')}><PanelRight size={19} /><span>属性</span></button>
+            <button type="button" className={mobilePanel === 'layers' ? 'is-active' : ''} onClick={() => setMobilePanel(mobilePanel === 'layers' ? null : 'layers')}><Layers3 size={19} /><span>图层</span></button>
+            <button type="button" onClick={() => setExportOpen(true)}><Download size={19} /><span>导出</span></button>
+          </nav>
+        </div>
 
         {isProcessing && (
           <div className="processing-card" role="status">
