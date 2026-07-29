@@ -35,7 +35,8 @@
     "category": "GraphicsAndDesign",
     "windows": {
       "nsis": {
-        "displayLanguageSelector": true,
+        "languages": ["SimpChinese", "English"],
+        "displayLanguageSelector": false,
         "installerIcon": "icons/icon.ico"
       }
     },

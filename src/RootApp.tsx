@@ -1,4 +1,4 @@
-import { ArrowRight, Carrot, Check, Code2, Download, Image, Layers3, LockKeyhole, MonitorSmartphone, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowRight, Carrot, Check, Code2, Download, HardDrive, Image, Layers3, LockKeyhole, Monitor, MonitorSmartphone, ShieldCheck, Smartphone, Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import App from './App';
 import { AuthProvider } from './auth/AuthProvider';
@@ -38,20 +38,37 @@ function useRoute() {
 
 function LandingPage() {
   const repository = import.meta.env.VITE_GITHUB_REPOSITORY || 'OWNER/dongni-market-studio';
-  const releaseUrl = repository.startsWith('OWNER/') ? 'https://github.com/' : `https://github.com/${repository}/releases/latest`;
+  const windowsInstallerUrl = repository.startsWith('OWNER/')
+    ? 'https://github.com/'
+    : `https://github.com/${repository}/releases/latest/download/Dongni-Market-Studio-Setup-x64.exe`;
   return (
     <main className="public-site">
       <nav className="public-nav">
         <button type="button" className="public-brand" onClick={() => navigate('')}><BrandLockup fixedLight /></button>
-        <div><a href={releaseUrl} target="_blank" rel="noreferrer"><Download size={14} />下载 Windows 版</a><button type="button" onClick={() => navigate('editor')}>打开网页版 <ArrowRight size={14} /></button></div>
+        <div><a href={windowsInstallerUrl}><Download size={14} />下载 Windows 版</a><button type="button" onClick={() => navigate('editor')}>打开网页版 <ArrowRight size={14} /></button></div>
       </nav>
       <section className="public-hero">
         <div className="public-hero-copy">
           <span className="public-kicker"><i />本地优先的专业图片编辑器</span>
           <h1>让复杂图片处理，<br />回到你的设备里。</h1>
           <p>抠图、图层、画板、滤镜、PSD与批量工作流。原图保存在本机，登录后即可在网页或Windows版本中使用。</p>
-          <div className="public-hero-actions"><button type="button" onClick={() => navigate('editor')}>登录使用网页版 <ArrowRight size={16} /></button><a href={releaseUrl} target="_blank" rel="noreferrer"><Download size={16} />获取 Windows 版</a></div>
+          <div className="public-hero-actions"><button type="button" onClick={() => navigate('editor')}>登录使用网页版 <ArrowRight size={16} /></button><a href={windowsInstallerUrl}><Download size={16} />获取 Windows 安装版</a></div>
           <div className="public-trust"><span><ShieldCheck size={14} />图片不上传</span><span><Check size={14} />免费使用</span><span><LockKeyhole size={14} />账号登录保护</span></div>
+          <section className="public-version-guide" aria-label="网页版与 Windows 版设备限制">
+            <header><strong>先看设备限制</strong><span>大文件优先使用 Windows 版</span></header>
+            <article>
+              <Smartphone size={16} />
+              <div><strong>手机网页版</strong><span>建议 6GB 内存，最高 16MP；低内存手机会自动降低预览清晰度。</span></div>
+            </article>
+            <article>
+              <Monitor size={16} />
+              <div><strong>桌面网页版</strong><span>建议 8GB 内存，最高 50MP；受浏览器内存和本地存储配额限制。</span></div>
+            </article>
+            <article className="recommended">
+              <HardDrive size={16} />
+              <div><strong>Windows 版</strong><span>不受网页 16MP/50MP 限制，可处理更大文件与更多画板；实际上限取决于电脑内存和磁盘。</span></div>
+            </article>
+          </section>
         </div>
         <div className="public-product-card" aria-label="产品功能预览">
           <div className="product-window-bar"><span /><span /><span /><small className="product-mini-brand"><b>东尼菜市场</b><em>STUDIO</em></small></div>
