@@ -2,7 +2,6 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as Dialog from '@radix-ui/react-dialog';
 import {
   ChevronDown,
-  Carrot,
   Check,
   CircleHelp,
   CircleUserRound,
@@ -27,6 +26,7 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { BrandLockup } from './BrandLockup';
 import type { EditorEngine } from '../editor/EditorEngine';
 import { useEditorStore } from '../store/editorStore';
 import { useAuth } from '../auth/authContext';
@@ -125,8 +125,7 @@ export function TopBar({ engine, documents, activeDocumentId, onSwitchDocument, 
   return (
     <header className="topbar">
       <div className="brand-lockup">
-        <span className="brand-mark"><Carrot size={25} strokeWidth={2.7} /></span>
-        <div><strong>东尼菜市场</strong><span>STUDIO</span></div>
+        <BrandLockup />
       </div>
       <div className="topbar-divider" />
       <DropdownMenu.Root>

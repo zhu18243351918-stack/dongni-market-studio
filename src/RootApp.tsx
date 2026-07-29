@@ -4,6 +4,7 @@ import App from './App';
 import { AuthProvider } from './auth/AuthProvider';
 import { useAuth } from './auth/authContext';
 import { isDesktopApp } from './auth/supabase';
+import { BrandLockup } from './components/BrandLockup';
 import './Shell.css';
 
 type AuthMode = 'login' | 'register' | 'forgot' | 'reset';
@@ -36,7 +37,7 @@ function LandingPage() {
   return (
     <main className="public-site">
       <nav className="public-nav">
-        <button type="button" className="public-brand" onClick={() => navigate('')}><span><Carrot size={22} /></span><strong>东尼菜市场</strong></button>
+        <button type="button" className="public-brand" onClick={() => navigate('')}><BrandLockup fixedLight /></button>
         <div><a href={releaseUrl} target="_blank" rel="noreferrer"><Download size={14} />下载 Windows 版</a><button type="button" onClick={() => navigate('editor')}>打开网页版 <ArrowRight size={14} /></button></div>
       </nav>
       <section className="public-hero">
@@ -48,7 +49,7 @@ function LandingPage() {
           <div className="public-trust"><span><ShieldCheck size={14} />图片不上传</span><span><Check size={14} />免费使用</span><span><LockKeyhole size={14} />账号登录保护</span></div>
         </div>
         <div className="public-product-card" aria-label="产品功能预览">
-          <div className="product-window-bar"><span /><span /><span /><small>东尼菜市场 Studio</small></div>
+          <div className="product-window-bar"><span /><span /><span /><small className="product-mini-brand"><b>东尼菜市场</b><em>STUDIO</em></small></div>
           <div className="product-window-body">
             <aside><Carrot size={21} /><Image size={18} /><Sparkles size={18} /><Layers3 size={18} /></aside>
             <div className="product-canvas"><div className="product-artboard"><span>画板 01</span><div className="product-shape" /><div className="product-copy"><i /><i /><i /></div></div></div>
@@ -61,7 +62,7 @@ function LandingPage() {
         <article><Layers3 size={20} /><strong>专业图层和多画板</strong><span>按需加载画板，减少大型工程占用的内存。</span></article>
         <article><ShieldCheck size={20} /><strong>原图只保存一份</strong><span>本机分块存储，撤销记录不再重复复制图片。</span></article>
       </section>
-      <footer className="public-footer"><span><Carrot size={16} />东尼菜市场</span><a href={repository.startsWith('OWNER/') ? 'https://github.com/' : `https://github.com/${repository}`} target="_blank" rel="noreferrer"><Code2 size={15} />GitHub</a></footer>
+      <footer className="public-footer"><BrandLockup fixedLight compact /><a href={repository.startsWith('OWNER/') ? 'https://github.com/' : `https://github.com/${repository}`} target="_blank" rel="noreferrer"><Code2 size={15} />GitHub</a></footer>
     </main>
   );
 }
@@ -112,7 +113,7 @@ function AuthScreen({ mode }: { mode: AuthMode }) {
 
   return (
     <main className="auth-page">
-      <button type="button" className="auth-brand" onClick={() => isDesktopApp ? navigate('editor') : navigate('')}><span><Carrot size={23} /></span><strong>东尼菜市场</strong></button>
+      <button type="button" className="auth-brand" onClick={() => isDesktopApp ? navigate('editor') : navigate('')}><BrandLockup fixedLight /></button>
       <div className="auth-layout">
         <figure className="auth-version-visual">
           <img src={versionImage} alt="东尼菜市场新版功能：网页与Windows双版本、原图本地保存、大图预览与后台处理" />
