@@ -1236,6 +1236,9 @@ button.layer-style-toggle.is-active { color: #111; background: rgba(249,115,22,.
     overflow: hidden;
   }
   .ambient-video, .ambient-wash { display: none; }
+  .app-shell input:not([type='range']):not([type='color']):not([type='checkbox']):not([type='radio']),
+  .app-shell select,
+  .app-shell textarea { font-size: 16px !important; }
   .topbar .history-actions,
   .topbar .account-trigger,
   .topbar .theme-toggle,

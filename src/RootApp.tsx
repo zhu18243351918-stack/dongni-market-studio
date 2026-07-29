@@ -17,6 +17,11 @@ function getRoute() {
 }
 
 function navigate(route: string) {
+  if (route === 'editor') {
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement) activeElement.blur();
+    window.scrollTo(0, 0);
+  }
   window.location.hash = `#/${route}`;
 }
 
@@ -146,6 +151,13 @@ function RoutedApp() {
   const route = useRoute();
   const auth = useAuth();
   const authMode = useMemo<AuthMode>(() => route === 'register' || route === 'forgot' || route === 'reset' ? route : 'login', [route]);
+
+  useEffect(() => {
+    if (route !== 'editor') return;
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement) activeElement.blur();
+    window.requestAnimationFrame(() => window.scrollTo(0, 0));
+  }, [route]);
 
   if (auth.loading) return <div className="app-boot-screen"><Carrot size={30} /><strong>正在验证登录状态…</strong></div>;
   if (route === 'home' && !isDesktopApp) return <LandingPage />;

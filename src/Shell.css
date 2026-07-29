@@ -106,4 +106,5 @@
   .auth-layout { gap: 12px; }
   .auth-version-visual { max-height: 220px; border-radius: 20px; }
   .auth-card { padding: 22px 18px; border-radius: 20px; }
+  .auth-card input { font-size: 16px; }
 }

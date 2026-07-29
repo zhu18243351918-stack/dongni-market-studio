@@ -55,9 +55,26 @@ export function CanvasStage({ onReady, initialProject, onInitialized, onDocument
     onReady(engine);
 
     const resize = () => engine.resize(wrapper.clientWidth, wrapper.clientHeight);
+    let mobileRefitTimer: number | null = null;
+    const refitMobile = () => {
+      if (!window.matchMedia('(max-width: 767px), (max-width: 900px) and (pointer: coarse)').matches) return;
+      if (mobileRefitTimer !== null) window.clearTimeout(mobileRefitTimer);
+      mobileRefitTimer = window.setTimeout(() => {
+        if (!active || document.visibilityState === 'hidden') return;
+        window.scrollTo(0, 0);
+        resize();
+      }, 120);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refitMobile();
+    };
     const observer = new ResizeObserver(resize);
     observer.observe(wrapper);
     resize();
+    window.addEventListener('pageshow', refitMobile);
+    window.addEventListener('orientationchange', refitMobile);
+    window.visualViewport?.addEventListener('resize', refitMobile);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     void restoreStoredFonts()
       .then((fonts) => {
@@ -107,7 +124,12 @@ export function CanvasStage({ onReady, initialProject, onInitialized, onDocument
 
     return () => {
       active = false;
+      if (mobileRefitTimer !== null) window.clearTimeout(mobileRefitTimer);
       observer.disconnect();
+      window.removeEventListener('pageshow', refitMobile);
+      window.removeEventListener('orientationchange', refitMobile);
+      window.visualViewport?.removeEventListener('resize', refitMobile);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       wrapper.removeEventListener('pointerdown', onPointerDown);
       wrapper.removeEventListener('pointermove', onPointerMove);
       wrapper.removeEventListener('pointerup', onPointerUp);
