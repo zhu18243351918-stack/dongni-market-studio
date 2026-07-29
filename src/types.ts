@@ -12,6 +12,7 @@ export type ToolId =
   | 'brush'
   | 'erase-brush'
   | 'restore-brush'
+  | 'patch'
   | 'face-retouch'
   | 'liquify'
   | 'templates'

@@ -1,6 +1,6 @@
 [package]
 name = "dongni-market-studio"
-version = "1.0.0"
+version = "1.0.1"
 description = "东尼菜市场本地优先图片编辑器"
 authors = ["Dongni Market Studio"]
 edition = "2021"

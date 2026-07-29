@@ -328,6 +328,8 @@ export class EditorEngine {
   private liquifyStrength = 55;
   private liquifyStart: Point | null = null;
   private liquifyEnd: Point | null = null;
+  private patchStart: Point | null = null;
+  private patchEnd: Point | null = null;
   private regionStart: Point | null = null;
   private regionEnd: Point | null = null;
 
@@ -488,10 +490,15 @@ export class EditorEngine {
         if (!descriptor) continue;
         const url = await this.assetStore.createObjectUrl(descriptor);
         this.objectUrls.add(url);
+        const originalDescriptor = image.assetId ? this.assets.find((asset) => asset.id === image.assetId) : undefined;
+        const originalUrl = originalDescriptor && originalDescriptor.id !== descriptor.id
+          ? await this.assetStore.createObjectUrl(originalDescriptor)
+          : url;
+        this.objectUrls.add(originalUrl);
         const dimensions = { width: image.width || descriptor.width || 1, height: image.height || descriptor.height || 1, scaleX: image.scaleX, scaleY: image.scaleY };
         await image.setSrc(url);
         image.set(dimensions);
-        image.originalSrc = url;
+        image.originalSrc = originalUrl;
         image.renderObjectUrl = url;
         image.assetSuspended = false;
       } else if (!shouldLoad && !image.assetSuspended) {
@@ -577,6 +584,8 @@ export class EditorEngine {
       object.name = '画笔';
       object.paintLayer = true;
       object.artboardId = this.activeArtboardId;
+      this.canvas.setActiveObject(object);
+      this.syncSelection();
       this.commitHistory();
     });
     this.canvas.on('mouse:wheel', (event) => {
@@ -593,7 +602,7 @@ export class EditorEngine {
     this.canvas.on('mouse:down', (event) => void this.handlePointerDown(event.e));
     this.canvas.on('mouse:move', (event) => this.handlePointerMove(event.e));
     this.canvas.on('mouse:up', (event) => void this.handlePointerUp(event.e));
-    this.canvas.on('mouse:dblclick', () => void this.finishPolygonLasso());
+    this.canvas.on('mouse:dblclick', () => void this.finishPolygonSelection());
     this.canvas.on('after:render', () => this.renderOverlay());
     this.canvas.upperCanvasEl.addEventListener('pointerleave', this.handleCanvasPointerLeave);
 
@@ -626,7 +635,7 @@ export class EditorEngine {
   };
 
   private isCircularBrushTool(tool = this.currentTool) {
-    return ['brush', 'quick-select', 'erase-brush', 'restore-brush', 'liquify'].includes(tool);
+    return ['brush', 'edge-cutout', 'quick-select', 'erase-brush', 'restore-brush', 'liquify'].includes(tool);
   }
 
   private applyToolCursor() {
@@ -635,7 +644,7 @@ export class EditorEngine {
       ? 'grab'
       : circularBrush
         ? 'none'
-        : this.currentTool.includes('select') || this.currentTool.includes('lasso') || this.currentTool === 'magic-wand' || this.currentTool === 'region'
+        : this.currentTool.includes('select') || this.currentTool.includes('lasso') || this.currentTool === 'magic-wand' || this.currentTool === 'patch' || this.currentTool === 'region'
           ? 'crosshair'
           : 'default';
     this.canvas.defaultCursor = cursor;
@@ -1663,11 +1672,12 @@ export class EditorEngine {
   }
 
   setTool(tool: ToolId) {
-    const selectionTools: ToolId[] = ['quick-select', 'magic-wand', 'lasso', 'polygon-lasso'];
-    if (selectionTools.includes(this.currentTool) && !selectionTools.includes(tool)) this.clearPixelSelection();
+    const selectionTools: ToolId[] = ['edge-cutout', 'quick-select', 'magic-wand', 'lasso', 'polygon-lasso'];
+    const selectionAwareTools: ToolId[] = [...selectionTools, 'patch', 'face-retouch'];
+    if (selectionAwareTools.includes(this.currentTool) && !selectionAwareTools.includes(tool)) this.clearPixelSelection();
     this.currentTool = tool;
     const activeObject = this.canvas.getActiveObject() as EditorObject | undefined;
-    const imageRequired = [...selectionTools, 'restore-brush', 'face-retouch', 'liquify'].includes(tool);
+    const imageRequired = [...selectionTools, 'restore-brush', 'patch', 'face-retouch', 'liquify'].includes(tool);
     const eraseHasTarget = tool === 'erase-brush' && activeObject && (isImageObject(activeObject) || this.isPaintLayer(activeObject));
     if ((imageRequired || (tool === 'erase-brush' && !eraseHasTarget)) && !isImageObject(activeObject)) {
       const editable = this.getEditableObjects().slice().reverse();
@@ -1702,6 +1712,8 @@ export class EditorEngine {
     this.eraserScenePoints = [];
     this.liquifyStart = null;
     this.liquifyEnd = null;
+    this.patchStart = null;
+    this.patchEnd = null;
     this.regionStart = null;
     this.regionEnd = null;
     this.renderOverlay();
@@ -2543,6 +2555,21 @@ export class EditorEngine {
       this.liquifyEnd = scenePoint;
       return;
     }
+    if (this.currentTool === 'patch') {
+      if (!this.activeMask) {
+        this.callbacks.onToast('请先用套索或多边形套索框选需要修补的区域', 'error');
+        return;
+      }
+      if (!isImageObject(this.canvas.getActiveObject())) {
+        this.callbacks.onToast('请先选择需要修补的图片图层', 'error');
+        return;
+      }
+      this.isPointerDown = true;
+      this.patchStart = scenePoint;
+      this.patchEnd = scenePoint;
+      this.renderOverlay();
+      return;
+    }
     if (this.currentTool === 'magic-wand') {
       await this.runMagicWand(scenePoint);
       return;
@@ -2558,7 +2585,7 @@ export class EditorEngine {
       }
       return;
     }
-    if (this.currentTool === 'quick-select') {
+    if (this.currentTool === 'quick-select' || this.currentTool === 'edge-cutout') {
       const pixel = await this.sceneToWorkPixel(scenePoint);
       if (!pixel) return;
       this.isPointerDown = true;
@@ -2610,6 +2637,11 @@ export class EditorEngine {
       this.renderOverlay();
       return;
     }
+    if (this.currentTool === 'patch') {
+      this.patchEnd = scenePoint;
+      this.renderOverlay();
+      return;
+    }
     if (this.currentTool === 'erase-brush' || this.currentTool === 'restore-brush') {
       const lastScene = this.eraserScenePoints[this.eraserScenePoints.length - 1];
       if (!lastScene || lastScene.distanceFrom(scenePoint) > Math.max(1, this.selectionOptions.eraserSize * 0.12)) {
@@ -2631,7 +2663,7 @@ export class EditorEngine {
       if (!last || last.distanceFrom(scenePoint) > 4 / this.canvas.getZoom()) this.lassoPoints.push(scenePoint);
       this.renderOverlay();
     }
-    if (this.currentTool === 'quick-select') {
+    if (this.currentTool === 'quick-select' || this.currentTool === 'edge-cutout') {
       void this.sceneToWorkPixel(scenePoint).then((pixel) => {
         if (!pixel) return;
         const last = this.quickSeeds[this.quickSeeds.length - 1];
@@ -2653,7 +2685,7 @@ export class EditorEngine {
       this.applyToolCursor();
       return;
     }
-    if (this.currentTool === 'quick-select' && this.isPointerDown) {
+    if ((this.currentTool === 'quick-select' || this.currentTool === 'edge-cutout') && this.isPointerDown) {
       this.isPointerDown = false;
       await this.runQuickSelection();
     }
@@ -2668,6 +2700,16 @@ export class EditorEngine {
       this.liquifyStart = null;
       this.liquifyEnd = null;
       if (start && end && start.distanceFrom(end) > 1 / this.canvas.getZoom()) await this.applyLiquifyStroke(start, end);
+    }
+    if (this.currentTool === 'patch' && this.isPointerDown) {
+      this.isPointerDown = false;
+      const start = this.patchStart;
+      const end = this.patchEnd;
+      this.patchStart = null;
+      this.patchEnd = null;
+      if (start && end && start.distanceFrom(end) > 1 / this.canvas.getZoom()) await this.applyPatchStroke(start, end);
+      else this.callbacks.onToast('请把选区拖到附近的干净取样区域', 'error');
+      this.renderOverlay();
     }
     if (this.currentTool === 'region' && this.isPointerDown) {
       this.isPointerDown = false;
@@ -2691,6 +2733,7 @@ export class EditorEngine {
       return null;
     }
     if (this.maskTargetId === active.id && this.workImageData) return { image: active, imageData: this.workImageData };
+    const targetChanged = this.maskTargetId !== active.id;
     const source = active.originalSrc || active.getSrc();
     const htmlImage = await imageFromUrl(source);
     const maxSide = 2048;
@@ -2705,7 +2748,10 @@ export class EditorEngine {
     context.drawImage(htmlImage, 0, 0, width, height);
     this.workImageData = context.getImageData(0, 0, width, height);
     this.maskTargetId = active.id || null;
-    this.activeMask = null;
+    if (targetChanged) {
+      this.activeMask = null;
+      this.activeFaces = [];
+    }
     return { image: active, imageData: this.workImageData };
   }
 
@@ -2775,8 +2821,10 @@ export class EditorEngine {
     try {
       this.activeMask = await this.selectionService.edgeBackground(prepared.imageData);
       await this.buildPreviewCanvas();
-      await this.applySelectionMask();
-      this.callbacks.onToast('一键抠图完成，可使用恢复笔刷找回细节', 'success');
+      this.canvas.setActiveObject(prepared.image);
+      this.syncSelection();
+      this.renderOverlay();
+      this.callbacks.onToast('已生成主体选区预览，请检查并确认抠图', 'success');
     } catch (error) {
       if ((error as Error).message !== '已取消') this.callbacks.onToast('背景识别失败，原图未被修改', 'error');
     } finally {
@@ -2816,7 +2864,7 @@ export class EditorEngine {
       const faces = await this.faceDetectionService.detect(prepared.imageData);
       if (!faces.length) {
         this.activeFaces = [];
-        this.callbacks.onToast('没有识别到清晰正脸，请换一张更清晰的图片', 'error');
+        this.callbacks.onToast('没有识别到清晰正脸，可使用套索手动框选美颜区域', 'error');
         return 0;
       }
       this.activeFaces = faces;
@@ -2853,16 +2901,56 @@ export class EditorEngine {
     }
   }
 
+  async useCurrentSelectionAsFaceRegion() {
+    const prepared = await this.prepareWorkImage();
+    if (!prepared || !this.activeMask || prepared.image.id !== this.maskTargetId) {
+      this.callbacks.onToast('请先用套索或多边形套索框选需要美颜的脸部区域', 'error');
+      return false;
+    }
+    let minX = this.activeMask.width;
+    let minY = this.activeMask.height;
+    let maxX = -1;
+    let maxY = -1;
+    for (let y = 0; y < this.activeMask.height; y += 1) {
+      for (let x = 0; x < this.activeMask.width; x += 1) {
+        if (this.activeMask.data[y * this.activeMask.width + x] < 16) continue;
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      }
+    }
+    if (maxX < minX || maxY < minY) {
+      this.callbacks.onToast('当前选区为空，请重新框选脸部区域', 'error');
+      return false;
+    }
+    this.activeFaces = [{ x: minX, y: minY, width: Math.max(1, maxX - minX + 1), height: Math.max(1, maxY - minY + 1) }];
+    prepared.image.beautyBaseSrc ||= prepared.image.getSrc();
+    this.canvas.setActiveObject(prepared.image);
+    this.syncSelection();
+    this.renderOverlay();
+    this.callbacks.onToast('已使用当前选区作为手动美颜区域', 'success');
+    return true;
+  }
+
   async applyFaceRetouch(smoothing: number, slimming: number) {
     let prepared = await this.prepareWorkImage();
     if (!prepared) return;
     if (!this.activeFaces.length) {
-      const count = await this.detectFaceSelection();
-      if (!count) return;
+      if (this.activeMask) {
+        const selected = await this.useCurrentSelectionAsFaceRegion();
+        if (!selected) return;
+      } else {
+        const count = await this.detectFaceSelection();
+        if (!count) return;
+      }
       prepared = await this.prepareWorkImage();
       if (!prepared) return;
     }
     const image = prepared.image;
+    const faceMask = this.activeMask
+      ? { width: this.activeMask.width, height: this.activeMask.height, data: new Uint8ClampedArray(this.activeMask.data) }
+      : null;
     const baseSource = image.beautyBaseSrc || image.getSrc();
     image.beautyBaseSrc ||= baseSource;
     this.callbacks.onProcessing(true, '正在应用美颜与瘦脸…');
@@ -2882,10 +2970,12 @@ export class EditorEngine {
         height: face.height * scale,
       }));
       if (slimming > 0) this.applyFaceSlimWarp(context, canvas.width, canvas.height, faces, slimming);
-      if (smoothing > 0) this.applyFaceSmoothing(canvas, faces, smoothing);
+      if (smoothing > 0) this.applyFaceSmoothing(canvas, faces, smoothing, faceMask);
       await image.setSrc(canvas.toDataURL('image/png'));
       this.workImageData = null;
       this.maskTargetId = null;
+      this.activeFaces = [];
+      this.clearPixelSelection();
       image.setCoords();
       this.canvas.setActiveObject(image);
       this.canvas.requestRenderAll();
@@ -2936,7 +3026,7 @@ export class EditorEngine {
     context.putImageData(output, 0, 0);
   }
 
-  private applyFaceSmoothing(canvas: HTMLCanvasElement, faces: FaceRect[], strength: number) {
+  private applyFaceSmoothing(canvas: HTMLCanvasElement, faces: FaceRect[], strength: number, selectionMask: SelectionMask | null = null) {
     const blurred = document.createElement('canvas');
     blurred.width = canvas.width;
     blurred.height = canvas.height;
@@ -2950,11 +3040,31 @@ export class EditorEngine {
     mask.height = canvas.height;
     const maskContext = mask.getContext('2d');
     if (!maskContext) return;
-    maskContext.fillStyle = `rgba(255,255,255,${Math.min(0.72, 0.12 + strength / 100 * 0.6)})`;
-    for (const face of faces) {
-      maskContext.beginPath();
-      maskContext.ellipse(face.x + face.width / 2, face.y + face.height * 0.54, face.width * 0.55, face.height * 0.7, 0, 0, Math.PI * 2);
-      maskContext.fill();
+    const blendOpacity = Math.min(0.72, 0.12 + strength / 100 * 0.6);
+    if (selectionMask) {
+      const selectionCanvas = document.createElement('canvas');
+      selectionCanvas.width = selectionMask.width;
+      selectionCanvas.height = selectionMask.height;
+      const selectionContext = selectionCanvas.getContext('2d');
+      if (selectionContext) {
+        const pixels = selectionContext.createImageData(selectionMask.width, selectionMask.height);
+        for (let index = 0; index < selectionMask.data.length; index += 1) {
+          const offset = index * 4;
+          pixels.data[offset] = 255;
+          pixels.data[offset + 1] = 255;
+          pixels.data[offset + 2] = 255;
+          pixels.data[offset + 3] = Math.round(selectionMask.data[index] * blendOpacity);
+        }
+        selectionContext.putImageData(pixels, 0, 0);
+        maskContext.drawImage(selectionCanvas, 0, 0, canvas.width, canvas.height);
+      }
+    } else {
+      maskContext.fillStyle = `rgba(255,255,255,${blendOpacity})`;
+      for (const face of faces) {
+        maskContext.beginPath();
+        maskContext.ellipse(face.x + face.width / 2, face.y + face.height * 0.54, face.width * 0.55, face.height * 0.7, 0, 0, Math.PI * 2);
+        maskContext.fill();
+      }
     }
     blurredContext.globalCompositeOperation = 'destination-in';
     blurredContext.drawImage(mask, 0, 0);
@@ -3038,16 +3148,121 @@ export class EditorEngine {
     }
   }
 
+  private async applyPatchStroke(startScene: Point, endScene: Point) {
+    const prepared = await this.prepareWorkImage();
+    if (!prepared || !this.activeMask || prepared.image.id !== this.maskTargetId) {
+      this.callbacks.onToast('修补选区已失效，请重新使用套索框选', 'error');
+      return;
+    }
+    const start = await this.sceneToWorkPixel(startScene);
+    const end = await this.sceneToWorkPixel(endScene);
+    if (!start || !end) {
+      this.callbacks.onToast('请在同一张图片内拖到干净的取样区域', 'error');
+      return;
+    }
+    const image = prepared.image;
+    this.callbacks.onProcessing(true, '正在融合周围像素…');
+    try {
+      const source = await imageFromUrl(image.getSrc());
+      const width = source.naturalWidth || source.width;
+      const height = source.naturalHeight || source.height;
+      const output = document.createElement('canvas');
+      output.width = width;
+      output.height = height;
+      const outputContext = output.getContext('2d');
+      if (!outputContext) throw new Error('无法处理修补区域');
+      outputContext.drawImage(source, 0, 0, width, height);
+
+      const scaleX = width / this.activeMask.width;
+      const scaleY = height / this.activeMask.height;
+      const offsetX = (end.x - start.x) * scaleX;
+      const offsetY = (end.y - start.y) * scaleY;
+      const smallMask = document.createElement('canvas');
+      smallMask.width = this.activeMask.width;
+      smallMask.height = this.activeMask.height;
+      const smallMaskContext = smallMask.getContext('2d');
+      if (!smallMaskContext) throw new Error('无法读取修补选区');
+      const maskPixels = smallMaskContext.createImageData(smallMask.width, smallMask.height);
+      for (let index = 0; index < this.activeMask.data.length; index += 1) {
+        const offset = index * 4;
+        maskPixels.data[offset] = 255;
+        maskPixels.data[offset + 1] = 255;
+        maskPixels.data[offset + 2] = 255;
+        maskPixels.data[offset + 3] = this.activeMask.data[index];
+      }
+      smallMaskContext.putImageData(maskPixels, 0, 0);
+
+      const fullMask = document.createElement('canvas');
+      fullMask.width = width;
+      fullMask.height = height;
+      const fullMaskContext = fullMask.getContext('2d');
+      if (!fullMaskContext) throw new Error('无法融合修补边缘');
+      fullMaskContext.filter = `blur(${Math.max(1, Math.round(Math.max(scaleX, scaleY) * 2))}px)`;
+      fullMaskContext.drawImage(smallMask, 0, 0, width, height);
+
+      const sampled = document.createElement('canvas');
+      sampled.width = width;
+      sampled.height = height;
+      const sampledContext = sampled.getContext('2d');
+      if (!sampledContext) throw new Error('无法创建修补图层');
+      sampledContext.drawImage(source, -offsetX, -offsetY, width, height);
+      sampledContext.globalCompositeOperation = 'destination-in';
+      sampledContext.drawImage(fullMask, 0, 0);
+      outputContext.drawImage(sampled, 0, 0);
+
+      const dataUrl = output.toDataURL('image/png');
+      let nextSource = dataUrl;
+      if (image.assetId) {
+        const blob = await (await fetch(dataUrl)).blob();
+        const descriptor = await this.assetStore.putStream(blob, {
+          name: `${image.name || '图片'}-patch`,
+          mimeType: 'image/png',
+          kind: 'derived',
+          width,
+          height,
+          sourceAssetId: image.assetId,
+        });
+        this.assets = await this.assetStore.list();
+        nextSource = await this.assetStore.createObjectUrl(descriptor);
+        this.objectUrls.add(nextSource);
+        image.renderAssetId = descriptor.id;
+        image.renderObjectUrl = nextSource;
+      }
+      await image.setSrc(nextSource);
+      image.beautyBaseSrc = nextSource;
+      image.setCoords();
+
+      const workCanvas = document.createElement('canvas');
+      workCanvas.width = this.activeMask.width;
+      workCanvas.height = this.activeMask.height;
+      const workContext = workCanvas.getContext('2d', { willReadFrequently: true });
+      if (workContext) {
+        workContext.drawImage(output, 0, 0, workCanvas.width, workCanvas.height);
+        this.workImageData = workContext.getImageData(0, 0, workCanvas.width, workCanvas.height);
+      }
+      this.canvas.setActiveObject(image);
+      this.canvas.requestRenderAll();
+      this.syncSelection();
+      this.commitHistory();
+      this.callbacks.onToast('修补完成，选区仍保留，可继续取样或撤销', 'success');
+    } catch {
+      this.callbacks.onToast('修补失败，原图未被修改', 'error');
+    } finally {
+      this.callbacks.onProcessing(false);
+    }
+  }
+
   private async finishLasso() {
     if (this.lassoPoints.length < 3) return;
     await this.applyPolygonSelection(this.lassoPoints);
     this.lassoPoints = [];
   }
 
-  private async finishPolygonLasso() {
+  async finishPolygonSelection() {
     if (this.currentTool !== 'polygon-lasso' || this.lassoPoints.length < 3) return;
     await this.applyPolygonSelection(this.lassoPoints);
     this.lassoPoints = [];
+    this.renderOverlay();
   }
 
   private async applyPolygonSelection(points: Point[]) {
@@ -3214,6 +3429,58 @@ export class EditorEngine {
     this.commitHistory();
   }
 
+  async fillPixelSelection(color: string, opacity = 1) {
+    const current = this.canvas.getActiveObject() as EditorImage | undefined;
+    const active = isImageObject(current)
+      ? current
+      : this.maskTargetId
+        ? (this.findObject(this.maskTargetId) as EditorImage | undefined)
+        : undefined;
+    if (!isImageObject(active) || !this.activeMask || active.id !== this.maskTargetId) {
+      this.callbacks.onToast('请先在图片上建立套索选区', 'error');
+      return;
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = this.activeMask.width;
+    canvas.height = this.activeMask.height;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    const rgba = new Color(color).getSource();
+    const imageData = context.createImageData(canvas.width, canvas.height);
+    const alpha = Math.max(0, Math.min(1, opacity));
+    for (let index = 0; index < this.activeMask.data.length; index += 1) {
+      const offset = index * 4;
+      imageData.data[offset] = rgba[0];
+      imageData.data[offset + 1] = rgba[1];
+      imageData.data[offset + 2] = rgba[2];
+      imageData.data[offset + 3] = Math.round(this.activeMask.data[index] * alpha);
+    }
+    context.putImageData(imageData, 0, 0);
+    const dataUrl = canvas.toDataURL('image/png');
+    const layer = await FabricImage.fromURL(dataUrl, {}, { originX: active.originX, originY: active.originY }) as EditorImage;
+    layer.id = createId('selection-fill');
+    layer.name = '选区填色';
+    layer.originalSrc = dataUrl;
+    layer.adjustments = { ...DEFAULT_ADJUSTMENTS };
+    layer.artboardId = active.artboardId || this.activeArtboardId;
+    layer.set({
+      left: active.left,
+      top: active.top,
+      scaleX: (active.scaleX || 1) * ((active.width || canvas.width) / canvas.width),
+      scaleY: (active.scaleY || 1) * ((active.height || canvas.height) / canvas.height),
+      angle: active.angle,
+      flipX: active.flipX,
+      flipY: active.flipY,
+      hasControls: this.showControls,
+    });
+    this.canvas.add(layer);
+    this.canvas.setActiveObject(layer);
+    this.clearPixelSelection();
+    this.syncSelection();
+    this.commitHistory();
+    this.callbacks.onToast('已将选区填色生成独立图层', 'success');
+  }
+
   private async applyEraserStroke(restore: boolean) {
     if (!this.eraserScenePoints.length) return;
     const active = this.canvas.getActiveObject();
@@ -3221,8 +3488,15 @@ export class EditorEngine {
     try {
       let changed = false;
       if (!restore && !isImageObject(active)) changed = await this.erasePaintLayers(active) || changed;
-      if (isImageObject(active) && this.workImageData && this.eraserPoints.length) {
-        changed = await this.applyImageMaskStroke(active, restore) || changed;
+      if (isImageObject(active)) {
+        await this.prepareWorkImage();
+        const points: Array<{ x: number; y: number }> = [];
+        for (const scenePoint of this.eraserScenePoints) {
+          const pixel = await this.sceneToWorkPixel(scenePoint);
+          if (pixel) points.push(pixel);
+        }
+        if (points.length) this.eraserPoints = points;
+        if (this.workImageData && this.eraserPoints.length) changed = await this.applyImageMaskStroke(active, restore) || changed;
       }
       if (!changed && !restore) changed = await this.erasePaintLayers(active) || changed;
       this.eraserPoints = [];
@@ -3243,6 +3517,7 @@ export class EditorEngine {
 
   private async applyImageMaskStroke(image: EditorImage, restore: boolean) {
     if (!this.workImageData || !this.eraserPoints.length) return false;
+    if (restore && !image.maskSrc) return false;
     const source = image.originalSrc || image.getSrc();
     const maskCanvas = document.createElement('canvas');
     maskCanvas.width = this.workImageData.width;
@@ -3315,12 +3590,27 @@ export class EditorEngine {
       temporary.add(clone);
       temporary.renderAll();
       const context = temporary.getContext();
+      const originalDataUrl = (context.canvas as HTMLCanvasElement).toDataURL('image/png');
+      const maskCanvas = document.createElement('canvas');
+      maskCanvas.width = width;
+      maskCanvas.height = height;
+      const maskContext = maskCanvas.getContext('2d');
+      if (!maskContext) {
+        temporary.dispose();
+        continue;
+      }
+      maskContext.fillStyle = '#ffffff';
+      maskContext.fillRect(0, 0, width, height);
+      maskContext.save();
+      maskContext.globalCompositeOperation = 'destination-out';
+      maskContext.strokeStyle = '#000000';
+      maskContext.fillStyle = '#000000';
+      maskContext.lineWidth = this.selectionOptions.eraserSize;
+      this.drawRoundStroke(maskContext, this.eraserScenePoints.map((point) => ({ x: point.x - left, y: point.y - top })));
+      maskContext.restore();
       context.save();
-      context.globalCompositeOperation = 'destination-out';
-      context.strokeStyle = '#000000';
-      context.fillStyle = '#000000';
-      context.lineWidth = this.selectionOptions.eraserSize;
-      this.drawRoundStroke(context, this.eraserScenePoints.map((point) => ({ x: point.x - left, y: point.y - top })));
+      context.globalCompositeOperation = 'destination-in';
+      context.drawImage(maskCanvas, 0, 0);
       context.restore();
       const dataUrl = (context.canvas as HTMLCanvasElement).toDataURL('image/png');
       temporary.dispose();
@@ -3328,8 +3618,25 @@ export class EditorEngine {
       replacement.id = object.id || createId('brush');
       replacement.name = object.name || '画笔';
       replacement.paintLayer = true;
-      replacement.originalSrc = dataUrl;
+      replacement.originalSrc = originalDataUrl;
       replacement.adjustments = { ...DEFAULT_ADJUSTMENTS };
+      replacement.artboardId = object.artboardId || this.activeArtboardId;
+      replacement.locked = object.locked;
+      replacement.originalWidth = width;
+      replacement.originalHeight = height;
+      const originalBlob = await (await fetch(originalDataUrl)).blob();
+      const originalAsset = await this.assetStore.putStream(originalBlob, {
+        name: `${replacement.name}-original`,
+        mimeType: 'image/png',
+        kind: 'original',
+        width,
+        height,
+      });
+      replacement.assetId = originalAsset.id;
+      replacement.previewAssetId = originalAsset.id;
+      const stored = await this.persistMaskResult(replacement, maskCanvas.toDataURL('image/png'), dataUrl);
+      await replacement.setSrc(stored.maskedUrl);
+      replacement.maskEnabled = true;
       replacement.set({ left, top, visible: object.visible, opacity: 1, hasControls: this.showControls });
       const index = this.canvas.getObjects().indexOf(object);
       this.canvas.remove(object);
@@ -3575,6 +3882,28 @@ export class EditorEngine {
       context.stroke();
       context.restore();
     }
+    if (this.patchStart && this.patchEnd) {
+      const start = util.transformPoint(this.patchStart, viewport);
+      const end = util.transformPoint(this.patchEnd, viewport);
+      const angle = Math.atan2(end.y - start.y, end.x - start.x);
+      context.save();
+      context.setLineDash([6, 4]);
+      context.strokeStyle = '#f97316';
+      context.fillStyle = '#f97316';
+      context.lineWidth = 2;
+      context.beginPath();
+      context.moveTo(start.x, start.y);
+      context.lineTo(end.x, end.y);
+      context.stroke();
+      context.setLineDash([]);
+      context.beginPath();
+      context.moveTo(end.x, end.y);
+      context.lineTo(end.x - Math.cos(angle - Math.PI / 6) * 10, end.y - Math.sin(angle - Math.PI / 6) * 10);
+      context.lineTo(end.x - Math.cos(angle + Math.PI / 6) * 10, end.y - Math.sin(angle + Math.PI / 6) * 10);
+      context.closePath();
+      context.fill();
+      context.restore();
+    }
     if (this.brushCursorPoint && this.isCircularBrushTool() && !this.spacePressed) {
       const diameter = this.getBrushCursorDiameter();
       const radius = Math.max(0.5, diameter / 2);
@@ -3599,13 +3928,13 @@ export class EditorEngine {
     const current = this.canvas.getActiveObject();
     const image = isImageObject(current)
       ? current
-      : this.currentTool === 'quick-select' || this.currentTool === 'restore-brush'
+      : this.currentTool === 'quick-select' || this.currentTool === 'edge-cutout' || this.currentTool === 'restore-brush'
         ? (this.maskTargetId ? this.findObject(this.maskTargetId) : undefined)
         : undefined;
     if (!isImageObject(image)) {
       const size = this.currentTool === 'liquify'
         ? this.liquifySize
-        : this.currentTool === 'quick-select'
+        : this.currentTool === 'quick-select' || this.currentTool === 'edge-cutout'
           ? this.selectionOptions.brushSize
           : this.selectionOptions.eraserSize;
       return Math.max(1, size * this.canvas.getZoom());
@@ -3614,7 +3943,7 @@ export class EditorEngine {
     const averageImageScale = (Math.abs(scale.x) + Math.abs(scale.y)) / 2;
     const size = this.currentTool === 'liquify'
       ? this.liquifySize
-      : this.currentTool === 'quick-select'
+      : this.currentTool === 'quick-select' || this.currentTool === 'edge-cutout'
         ? this.selectionOptions.brushSize
         : this.selectionOptions.eraserSize;
     return Math.max(1, size * averageImageScale * this.canvas.getZoom());
@@ -3778,13 +4107,18 @@ export class EditorEngine {
       const assetId = typeof record.assetId === 'string' ? record.assetId : undefined;
       if ((record.type === 'Image' || record.type === 'image') && (renderAssetId || previewAssetId || assetId) && !record.src) {
         const shouldHydrate = record.artboardId === this.activeArtboardId;
-        const descriptor = shouldHydrate ? this.assets.find((asset) => asset.id === (renderAssetId || previewAssetId || assetId)) : undefined;
-        if (descriptor && shouldHydrate) {
-          const url = await this.assetStore.createObjectUrl(descriptor);
-          this.objectUrls.add(url);
-          record.src = url;
-          record.originalSrc = url;
-          record.renderObjectUrl = url;
+        const displayDescriptor = shouldHydrate ? this.assets.find((asset) => asset.id === (renderAssetId || previewAssetId || assetId)) : undefined;
+        const originalDescriptor = shouldHydrate && assetId ? this.assets.find((asset) => asset.id === assetId) : undefined;
+        if (displayDescriptor && shouldHydrate) {
+          const displayUrl = await this.assetStore.createObjectUrl(displayDescriptor);
+          const originalUrl = originalDescriptor && originalDescriptor.id !== displayDescriptor.id
+            ? await this.assetStore.createObjectUrl(originalDescriptor)
+            : displayUrl;
+          this.objectUrls.add(displayUrl);
+          this.objectUrls.add(originalUrl);
+          record.src = displayUrl;
+          record.originalSrc = originalUrl;
+          record.renderObjectUrl = displayUrl;
           record.assetSuspended = false;
         } else {
           record.src = TRANSPARENT_PIXEL;

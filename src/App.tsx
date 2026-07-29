@@ -2,6 +2,7 @@ import * as Tabs from '@radix-ui/react-tabs';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { motion, useReducedMotion } from 'motion/react';
 import {
+  Bandage,
   Brush,
   Crop,
   Download,
@@ -68,6 +69,7 @@ const tools: Array<{ id: ToolId; label: string; shortcut?: string; icon: typeof 
   { id: 'brush', label: '画笔', shortcut: 'B', icon: Brush, group: 'create' },
   { id: 'erase-brush', label: '擦除笔刷', shortcut: 'E', icon: Eraser, group: 'retouch' },
   { id: 'restore-brush', label: '恢复笔刷', shortcut: 'Q', icon: RotateCcw, group: 'retouch' },
+  { id: 'patch', label: '修补工具', shortcut: 'K', icon: Bandage, group: 'retouch' },
   { id: 'face-retouch', label: '一键美颜', shortcut: 'F', icon: Sparkles, group: 'retouch' },
   { id: 'liquify', label: '局部拉扯', shortcut: 'U', icon: Move, group: 'retouch' },
   { id: 'templates', label: '模板市场', icon: LayoutTemplate, group: 'productivity' },
@@ -92,6 +94,7 @@ const mobileQuickActions: Array<{
   { id: 'adjust', label: '调色', icon: SlidersHorizontal, panel: 'properties' },
   { id: 'filters', label: '滤镜', icon: Palette, tool: 'filters' },
   { id: 'erase', label: '消除笔', icon: Eraser, tool: 'erase-brush' },
+  { id: 'patch', label: '修补', icon: Bandage, tool: 'patch' },
   { id: 'text', label: '文字', icon: TextCursorInput, tool: 'text' },
   { id: 'beauty', label: '美颜', icon: Sparkles, tool: 'face-retouch' },
   { id: 'more', label: '更多', icon: Plus, panel: 'tools' },
@@ -385,8 +388,8 @@ function App() {
   const chooseTool = useCallback((tool: ToolId) => {
     if (!engine) return;
     if (tool === 'edge-cutout') {
-      setTool('select');
-      engine.setTool('select');
+      setTool(tool);
+      engine.setTool(tool);
       void engine.oneClickCutout();
     } else if (tool === 'text') {
       engine.setTool('select');
@@ -396,7 +399,7 @@ function App() {
       setTool(tool);
       engine.setTool(tool);
     }
-    const opensInspector = ['quick-select', 'magic-wand', 'lasso', 'polygon-lasso', 'erase-brush', 'restore-brush', 'face-retouch', 'liquify', 'shapes', 'templates', 'filters', 'styles', 'region', 'workflow'].includes(tool);
+    const opensInspector = ['edge-cutout', 'quick-select', 'magic-wand', 'lasso', 'polygon-lasso', 'erase-brush', 'restore-brush', 'patch', 'face-retouch', 'liquify', 'shapes', 'templates', 'filters', 'styles', 'region', 'workflow'].includes(tool);
     if (opensInspector) {
       setRightTab('properties');
       setMobilePanel(window.matchMedia('(max-width: 767px)').matches ? 'properties' : null);
@@ -439,7 +442,7 @@ function App() {
       if (event.key === 'Delete' || event.key === 'Backspace') { engine?.deleteActive(); return; }
       const shortcutMap: Record<string, ToolId> = {
         v: 'select', h: 'hand', c: 'crop', w: 'quick-select', m: 'magic-wand', l: 'lasso', p: 'polygon-lasso',
-        t: 'text', r: 'shapes', b: 'brush', e: 'erase-brush', q: 'restore-brush', f: 'face-retouch', u: 'liquify', j: 'filters', g: 'region',
+        t: 'text', r: 'shapes', b: 'brush', e: 'erase-brush', q: 'restore-brush', k: 'patch', f: 'face-retouch', u: 'liquify', j: 'filters', g: 'region',
       };
       const tool = shortcutMap[event.key.toLowerCase()];
       if (tool) chooseTool(tool);
@@ -532,12 +535,14 @@ function App() {
             <div className="context-bar">
               <div className="context-tool"><span className="context-icon"><Scissors size={14} /></span><strong>{toolNames[activeTool]}</strong></div>
               <span className="context-hint">
+                {activeTool === 'edge-cutout' && '先预览主体选区；可涂抹标记主体或背景，确认无误后再生成蒙版'}
                 {activeTool === 'quick-select' && '在主体上涂抹；切换“标记背景”可减去错误区域'}
                 {activeTool === 'magic-wand' && '点击相近颜色区域，通过容差控制选取范围'}
                 {activeTool === 'lasso' && '按住并绘制自由选区，松开完成'}
-                {activeTool === 'polygon-lasso' && '逐点点击轮廓，双击完成选区'}
+                {activeTool === 'polygon-lasso' && '逐点点击轮廓，然后点击右侧“完成并闭合选区”'}
                 {activeTool === 'erase-brush' && '在图片上涂抹以擦除，松开后写入非破坏性蒙版'}
                 {activeTool === 'restore-brush' && '在已擦除区域涂抹，恢复上传时的原图内容'}
+                {activeTool === 'patch' && '先用套索建立修补选区，再拖到附近干净区域取样并自动融合'}
                 {activeTool === 'face-retouch' && '先识别人脸建立选区，再调节磨皮与瘦脸强度'}
                 {activeTool === 'liquify' && '在人物轮廓上按住并拖动：向内推可瘦脸瘦身，向外推可恢复或塑形'}
                 {activeTool === 'shapes' && '选择矩形、圆形、三角形或直线；创建后可继续调节圆角、描边和尺寸'}
@@ -546,7 +551,7 @@ function App() {
                 {activeTool === 'styles' && '将图片图层一键转换为像素风格或漫画风格，处理在本机完成'}
                 {activeTool === 'region' && '在画板上拖拽框选区域，命名后可向所有画板批量填写文字'}
                 {activeTool === 'workflow' && '自由组合画板、滤镜、区域文字和导出步骤，然后一键执行'}
-                {!['quick-select', 'magic-wand', 'lasso', 'polygon-lasso', 'erase-brush', 'restore-brush', 'face-retouch', 'liquify', 'shapes', 'templates', 'filters', 'styles', 'region', 'workflow'].includes(activeTool) && '所有编辑均在本机完成，图片不会上传'}
+                {!['edge-cutout', 'quick-select', 'magic-wand', 'lasso', 'polygon-lasso', 'erase-brush', 'restore-brush', 'patch', 'face-retouch', 'liquify', 'shapes', 'templates', 'filters', 'styles', 'region', 'workflow'].includes(activeTool) && '所有编辑均在本机完成，图片不会上传'}
               </span>
             </div>
             <div className="document-tabs-bar" role="tablist" aria-label="打开的文件">

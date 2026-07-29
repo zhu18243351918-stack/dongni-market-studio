@@ -8,7 +8,9 @@ import {
   AlignStartVertical,
   ArrowDown,
   ArrowUp,
+  Bandage,
   Brush,
+  Check,
   Copy,
   Crop,
   FlipHorizontal2,
@@ -34,6 +36,7 @@ import {
   Workflow,
   Grid3X3,
   Palette,
+  PaintBucket,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../auth/authContext';
@@ -409,8 +412,11 @@ function SelectionSection({ engine }: { engine: EditorEngine }) {
   const setPreviewMode = useEditorStore((state) => state.setPreviewMode);
   const refine = useEditorStore((state) => state.refine);
   const setRefine = useEditorStore((state) => state.setRefine);
+  const setTool = useEditorStore((state) => state.setTool);
+  const [fillColor, setFillColor] = useState('#ff6b35');
+  const [fillOpacity, setFillOpacity] = useState(100);
 
-  const selectionTools = ['quick-select', 'magic-wand', 'lasso', 'polygon-lasso'];
+  const selectionTools = ['edge-cutout', 'quick-select', 'magic-wand', 'lasso', 'polygon-lasso'];
   if (!selectionTools.includes(activeTool)) return null;
 
   const updateRefine = (next: Partial<SelectionRefineSettings>) => setRefine(next);
@@ -418,7 +424,7 @@ function SelectionSection({ engine }: { engine: EditorEngine }) {
     <section className="selection-workflow">
       <div className="selection-hero">
         <div className="selection-orb"><Scissors size={18} /></div>
-        <div><strong>{activeTool === 'magic-wand' ? 'PS 魔棒删除背景' : '选择并遮住'}</strong><span>{activeTool === 'magic-wand' ? '点击需要删除的背景颜色，红色区域将被隐藏' : '先建立选区，再优化边缘并生成蒙版'}</span></div>
+        <div><strong>{activeTool === 'edge-cutout' ? '主体选区预览' : activeTool === 'magic-wand' ? 'PS 魔棒删除背景' : '选择并遮住'}</strong><span>{activeTool === 'edge-cutout' ? '只预览、不直接删除；红色区域会被移除' : activeTool === 'magic-wand' ? '点击需要删除的背景颜色，红色区域将被隐藏' : '先建立选区，再优化边缘并生成蒙版'}</span></div>
       </div>
       <div className="inspector-section compact">
         <div className="section-title"><span>选区方式</span></div>
@@ -433,14 +439,18 @@ function SelectionSection({ engine }: { engine: EditorEngine }) {
             <label className="checkbox-row"><input type="checkbox" checked={contiguous} onChange={(event) => setContiguous(event.target.checked)} /><span>只选择连续区域</span><small>避免选中主体内部的相同颜色</small></label>
           </>
         )}
-        {activeTool === 'quick-select' && (
+        {(activeTool === 'quick-select' || activeTool === 'edge-cutout') && (
           <>
             <RangeControl label="画笔大小" value={brushSize} min={8} max={160} onChange={setBrushSize} suffix="px" />
             <ToggleGroup.Root className="segmented-control" type="single" value={brushSubtract ? 'subtract' : 'foreground'} onValueChange={(value) => value && setBrushSubtract(value === 'subtract')}>
               <ToggleGroup.Item value="foreground">标记主体</ToggleGroup.Item>
               <ToggleGroup.Item value="subtract">标记背景</ToggleGroup.Item>
             </ToggleGroup.Root>
+            {activeTool === 'edge-cutout' && <button type="button" className="secondary-action full-width" onClick={() => void engine.oneClickCutout()}>重新识别主体预览</button>}
           </>
+        )}
+        {activeTool === 'polygon-lasso' && (
+          <button type="button" className="primary-action full-width polygon-finish" onClick={() => void engine.finishPolygonSelection()}><Check size={15} />完成并闭合选区</button>
         )}
         <div className="selection-actions-grid">
           <button type="button" onClick={() => void engine.selectAllPixels()}>全选</button>
@@ -472,7 +482,13 @@ function SelectionSection({ engine }: { engine: EditorEngine }) {
       </div>
       <div className="selection-output-actions">
         <button type="button" className="secondary-action" onClick={() => void engine.duplicateSelectionAsLayer()}><Copy size={15} />复制为新图层</button>
-        <button type="button" className="primary-action" onClick={() => void engine.applySelectionMask()}><Scissors size={15} />生成图层蒙版</button>
+        <div className="selection-fill-controls">
+          <label><span>填色</span><input type="color" value={fillColor} onChange={(event) => setFillColor(event.target.value)} /></label>
+          <label><span>不透明度</span><input type="number" min={0} max={100} value={fillOpacity} onChange={(event) => setFillOpacity(Math.max(0, Math.min(100, Number(event.target.value))))} /></label>
+          <button type="button" className="secondary-action" onClick={() => void engine.fillPixelSelection(fillColor, fillOpacity / 100)}><PaintBucket size={15} />选区填色</button>
+        </div>
+        <button type="button" className="secondary-action" onClick={() => { setTool('patch'); engine.setTool('patch'); }}><Bandage size={15} />使用选区修补</button>
+        <button type="button" className="primary-action" onClick={() => void engine.applySelectionMask()}><Scissors size={15} />{activeTool === 'edge-cutout' ? '确认抠图并生成蒙版' : '生成图层蒙版'}</button>
       </div>
     </section>
   );
@@ -520,6 +536,7 @@ function FaceRetouchSection({ engine }: { engine: EditorEngine }) {
   const faceSlim = useEditorStore((state) => state.faceSlim);
   const setBeautySmooth = useEditorStore((state) => state.setBeautySmooth);
   const setFaceSlim = useEditorStore((state) => state.setFaceSlim);
+  const setTool = useEditorStore((state) => state.setTool);
   return (
     <section className="selection-workflow">
       <div className="selection-hero">
@@ -529,10 +546,29 @@ function FaceRetouchSection({ engine }: { engine: EditorEngine }) {
       <div className="inspector-section">
         <button type="button" className="primary-action full-width beauty-one-click" onClick={() => void engine.oneClickBeauty()}><Sparkles size={15} />一键美颜</button>
         <button type="button" className="secondary-action full-width" onClick={() => void engine.detectFaceSelection()}><ScanFace size={15} />识别人脸并建立选区</button>
+        <button type="button" className="secondary-action full-width" onClick={() => void engine.useCurrentSelectionAsFaceRegion()}><Check size={15} />使用当前选区作为美颜区域</button>
+        <button type="button" className="secondary-action full-width" onClick={() => { setTool('polygon-lasso'); engine.setTool('polygon-lasso'); }}><ScanLine size={15} />手动框选脸部区域</button>
         <RangeControl label="磨皮美颜" value={beautySmooth} min={0} max={100} suffix="%" onChange={setBeautySmooth} />
         <RangeControl label="瘦脸强度" value={faceSlim} min={0} max={100} suffix="%" onChange={setFaceSlim} />
-        <div className="eraser-note">建议先识别人脸检查红色选区，再应用效果。处理结果支持撤销。</div>
+        <div className="eraser-note">识别不到人脸时，可手动框选脸部、皮肤或需要磨皮的区域，再返回美颜工具应用。处理结果支持撤销。</div>
         <button type="button" className="primary-action full-width" onClick={() => void engine.applyFaceRetouch(beautySmooth, faceSlim)}><Sparkles size={15} />应用美颜与瘦脸</button>
+      </div>
+    </section>
+  );
+}
+
+function PatchSection({ engine }: { engine: EditorEngine }) {
+  const setTool = useEditorStore((state) => state.setTool);
+  return (
+    <section className="selection-workflow">
+      <div className="selection-hero">
+        <div className="selection-orb"><Bandage size={18} /></div>
+        <div><strong>修补工具</strong><span>把附近干净像素复制并融合到框选区域</span></div>
+      </div>
+      <div className="inspector-section">
+        <div className="patch-steps"><span>1</span><p>先用套索框选污点、杂物或需要修复的区域</p><span>2</span><p>切回修补工具，把选区拖到附近干净位置取样</p><span>3</span><p>松开后自动融合，选区会保留供继续修补</p></div>
+        <button type="button" className="secondary-action full-width" onClick={() => { setTool('polygon-lasso'); engine.setTool('polygon-lasso'); }}><ScanLine size={15} />创建多边形修补选区</button>
+        <button type="button" className="secondary-action full-width" onClick={() => { setTool('lasso'); engine.setTool('lasso'); }}><Brush size={15} />创建自由修补选区</button>
       </div>
     </section>
   );
@@ -840,11 +876,12 @@ export function PropertiesPanel({
   const selectedId = useEditorStore((state) => state.selectedId);
   const selectedType = useEditorStore((state) => state.selectedType);
   const activeTool = useEditorStore((state) => state.activeTool);
-  const isSelectionTool = ['quick-select', 'magic-wand', 'lasso', 'polygon-lasso'].includes(activeTool);
+  const isSelectionTool = ['edge-cutout', 'quick-select', 'magic-wand', 'lasso', 'polygon-lasso'].includes(activeTool);
   const isEraserTool = ['erase-brush', 'restore-brush'].includes(activeTool);
 
   if (isSelectionTool) return <SelectionSection engine={engine} />;
   if (isEraserTool) return <EraserSection engine={engine} />;
+  if (activeTool === 'patch') return <PatchSection engine={engine} />;
   if (activeTool === 'face-retouch') return <FaceRetouchSection engine={engine} />;
   if (activeTool === 'liquify') return <LiquifySection />;
   if (activeTool === 'shapes') return <ShapeLibrarySection engine={engine} />;

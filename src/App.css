@@ -191,6 +191,15 @@ input[type='range'] { width: 100%; height: 3px; accent-color: var(--accent); cur
 .preview-swatch.white { background: #fff; }
 .preview-swatch.checker, .checker-preview { background-color: #d9d9d9; background-image: linear-gradient(45deg,#aaa 25%,transparent 25%),linear-gradient(-45deg,#aaa 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#aaa 75%),linear-gradient(-45deg,transparent 75%,#aaa 75%); background-size: 12px 12px; background-position: 0 0,0 6px,6px -6px,-6px 0; }
 .selection-output-actions { display: grid; gap: 7px; padding: 13px 14px 18px; }
+.selection-fill-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); }
+.selection-fill-controls label { display: grid; gap: 4px; color: var(--muted); font-size: 8px; }
+.selection-fill-controls input { width: 100%; height: 30px; min-width: 0; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); }
+.selection-fill-controls input[type='color'] { padding: 3px; }
+.selection-fill-controls button { grid-column: 1 / -1; }
+.polygon-finish { margin-top: 10px; }
+.patch-steps { display: grid; grid-template-columns: 23px 1fr; gap: 8px; margin-bottom: 12px; }
+.patch-steps span { width: 23px; height: 23px; display: grid; place-items: center; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-size: 9px; font-weight: 700; }
+.patch-steps p { align-self: center; margin: 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
 .eraser-note { margin: 13px 0; padding: 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); color: var(--muted); font-size: 9px; line-height: 1.55; }
 .full-width { width: 100%; }
 .primary-action, .secondary-action { min-height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-radius: 7px; font-size: 10px; font-weight: 700; }
@@ -1203,6 +1212,12 @@ button.layer-style-toggle.is-active { color: #111; background: rgba(249,115,22,.
 .brand-lockup .system-brand__meta { color: var(--muted); font-size: 7.5px; font-weight: 500; letter-spacing: .16em; }
 
 @media (max-width: 767px) {
+  .selection-output-actions .primary-action,
+  .selection-output-actions .secondary-action,
+  .polygon-finish,
+  .patch-steps + .secondary-action,
+  .patch-steps + .secondary-action + .secondary-action { min-height: 44px; }
+  .selection-fill-controls input { height: 44px; }
   .brand-lockup { min-width: auto; }
   .brand-lockup .system-brand__copy { display: none; }
   .brand-lockup .system-brand { --brand-mark-size: 30px; }

@@ -186,6 +186,38 @@ function fallbackEdgeBackground(image: ImageData) {
   return foreground;
 }
 
+function keepOnlyBorderConnectedBackground(input: Uint8ClampedArray, width: number, height: number) {
+  const total = width * height;
+  const connected = new Uint8Array(total);
+  const queue = new Int32Array(total);
+  let head = 0;
+  let tail = 0;
+  const enqueue = (index: number) => {
+    if (index < 0 || index >= total || connected[index] || input[index] > 127) return;
+    connected[index] = 1;
+    queue[tail++] = index;
+  };
+  for (let x = 0; x < width; x += 1) {
+    enqueue(x);
+    enqueue((height - 1) * width + x);
+  }
+  for (let y = 1; y < height - 1; y += 1) {
+    enqueue(y * width);
+    enqueue(y * width + width - 1);
+  }
+  while (head < tail) {
+    const pixel = queue[head++];
+    const x = pixel % width;
+    if (x > 0) enqueue(pixel - 1);
+    if (x < width - 1) enqueue(pixel + 1);
+    enqueue(pixel - width);
+    enqueue(pixel + width);
+  }
+  const output = new Uint8ClampedArray(total);
+  for (let index = 0; index < total; index += 1) output[index] = connected[index] ? 0 : 255;
+  return output;
+}
+
 async function edgeBackground(image: ImageData) {
   try {
     const cv = await getCv();
@@ -208,9 +240,9 @@ async function edgeBackground(image: ImageData) {
       foreground[index] = mask.data[index] === cv.GC_FGD || mask.data[index] === cv.GC_PR_FGD ? 255 : 0;
     }
     src.delete(); mask.delete(); bgModel.delete(); fgModel.delete();
-    return foreground;
+    return keepOnlyBorderConnectedBackground(foreground, image.width, image.height);
   } catch {
-    return fallbackEdgeBackground(image);
+    return keepOnlyBorderConnectedBackground(fallbackEdgeBackground(image), image.width, image.height);
   }
 }
 
