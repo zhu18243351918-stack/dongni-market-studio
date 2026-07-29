@@ -18,6 +18,7 @@ import {
   Plus,
   PanelsTopLeft,
   Redo2,
+  RefreshCw,
   Save,
   Scaling,
   Settings2,
@@ -30,6 +31,7 @@ import { BrandLockup } from './BrandLockup';
 import type { EditorEngine } from '../editor/EditorEngine';
 import { useEditorStore } from '../store/editorStore';
 import { useAuth } from '../auth/authContext';
+import { isDesktopApp } from '../auth/supabase';
 import { inspectImportFile } from '../lib/importPreflight';
 import type { ImportPreflightResult, WorkspaceDocumentTab } from '../types';
 
@@ -55,6 +57,7 @@ export function TopBar({ engine, documents, activeDocumentId, onSwitchDocument, 
   const [inspecting, setInspecting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importAsSmartObject, setImportAsSmartObject] = useState(false);
+  const [updating, setUpdating] = useState(false);
   const canUndo = useEditorStore((state) => state.canUndo);
   const canRedo = useEditorStore((state) => state.canRedo);
   const theme = useEditorStore((state) => state.theme);
@@ -67,6 +70,24 @@ export function TopBar({ engine, documents, activeDocumentId, onSwitchDocument, 
   const setSnapEnabled = useEditorStore((state) => state.setSnapEnabled);
   const setUniformScaling = useEditorStore((state) => state.setUniformScaling);
   const setShowControls = useEditorStore((state) => state.setShowControls);
+  const setProcessing = useEditorStore((state) => state.setProcessing);
+
+  const installLatestVersion = async () => {
+    if (!isDesktopApp || updating) return;
+    setUpdating(true);
+    setProcessing(true, '正在下载最新版安装包…');
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const result = await invoke<{ status: 'up-to-date' | 'installing'; version: string }>('install_latest_update');
+      if (result.status === 'up-to-date') onToast(`当前已经是最新版 v${result.version}`, 'success');
+      else onToast(`v${result.version} 已下载，正在退出并替换旧版本`, 'success');
+    } catch (error) {
+      onToast(error instanceof Error ? error.message : '最新版下载失败，请稍后重试', 'error');
+    } finally {
+      setUpdating(false);
+      setProcessing(false);
+    }
+  };
 
   const queueImport = useCallback(async (file: File, asSmartObject = false) => {
     setImportAsSmartObject(asSmartObject);
@@ -83,14 +104,23 @@ export function TopBar({ engine, documents, activeDocumentId, onSwitchDocument, 
     }
   }, [onToast]);
 
+  const openImportedFile = useCallback((file: File, asSmartObject = false) => {
+    if (/\.(json|tuyan\.json)$/i.test(file.name)) {
+      if (!engine) return;
+      void engine.importProject(file).catch(() => onToast('工程文件无法打开', 'error'));
+      return;
+    }
+    void queueImport(file, asSmartObject);
+  }, [engine, onToast, queueImport]);
+
   useEffect(() => {
     const handleRequest = (event: Event) => {
       const file = (event as CustomEvent<File>).detail;
-      if (file) void queueImport(file);
+      if (file) openImportedFile(file);
     };
     window.addEventListener('dongni:request-import', handleRequest);
     return () => window.removeEventListener('dongni:request-import', handleRequest);
-  }, [queueImport]);
+  }, [openImportedFile]);
 
   useEffect(() => {
     const openImage = () => openFileInput.current?.click();
@@ -175,6 +205,10 @@ export function TopBar({ engine, documents, activeDocumentId, onSwitchDocument, 
             <DropdownMenu.Item className="dropdown-item" onSelect={onShowGuide}><CircleHelp size={15} />功能引导</DropdownMenu.Item>
             <DropdownMenu.Item className="dropdown-item" onSelect={() => engine?.fitToScreen()}><Maximize size={15} />画布适合窗口</DropdownMenu.Item>
             <DropdownMenu.Item className="dropdown-item" onSelect={toggleTheme}><Settings2 size={15} />切换深浅主题</DropdownMenu.Item>
+            {isDesktopApp && <>
+              <DropdownMenu.Separator className="dropdown-separator" />
+              <DropdownMenu.Item className="dropdown-item" disabled={updating} onSelect={() => void installLatestVersion()}><RefreshCw size={15} />{updating ? '正在下载最新版…' : '下载并安装最新版'}<kbd>替换旧版</kbd></DropdownMenu.Item>
+            </>}
           </DropdownMenu.Content>
         </DropdownMenu.Portal>
       </DropdownMenu.Root>
@@ -185,10 +219,7 @@ export function TopBar({ engine, documents, activeDocumentId, onSwitchDocument, 
         accept=".png,.jpg,.jpeg,.webp,.tif,.tiff,.psd,.psb,.json,.tuyan.json,image/png,image/jpeg,image/webp,image/tiff,image/vnd.adobe.photoshop,application/json"
         onChange={(event) => {
           const file = event.target.files?.[0];
-          if (file && engine) {
-            if (/\.(json|tuyan\.json)$/i.test(file.name)) void engine.importProject(file).catch(() => onToast('工程文件无法打开', 'error'));
-            else void queueImport(file, false);
-          }
+          if (file) openImportedFile(file);
           event.currentTarget.value = '';
         }}
       />
@@ -199,7 +230,7 @@ export function TopBar({ engine, documents, activeDocumentId, onSwitchDocument, 
         accept=".png,.jpg,.jpeg,.webp,.tif,.tiff,image/png,image/jpeg,image/webp,image/tiff"
         onChange={(event) => {
           const file = event.target.files?.[0];
-          if (file && engine) void queueImport(file, true);
+          if (file) openImportedFile(file, true);
           event.currentTarget.value = '';
         }}
       />

@@ -3,7 +3,20 @@ import { EditorEngine } from '../editor/EditorEngine';
 import { restoreStoredFonts } from '../lib/fontManager';
 import { useEditorStore } from '../store/editorStore';
 import { useAuth } from '../auth/authContext';
+import { isDesktopApp } from '../auth/supabase';
 import type { ProjectDocument, SmartObjectSource } from '../types';
+
+const DROP_MIME_TYPES: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  tif: 'image/tiff',
+  tiff: 'image/tiff',
+  psd: 'image/vnd.adobe.photoshop',
+  psb: 'image/vnd.adobe.photoshop',
+  json: 'application/json',
+};
 
 interface CanvasStageProps {
   onReady: (engine: EditorEngine) => void;
@@ -30,6 +43,7 @@ export function CanvasStage({ onReady, initialProject, onInitialized, onDocument
 
     const store = useEditorStore.getState();
     let active = true;
+    let unlistenNativeDrop: (() => void) | undefined;
     const engine = new EditorEngine(canvas, overlay, {
       onLayers: (layers) => useEditorStore.getState().setLayers(layers),
       onArtboards: (artboards, activeArtboardId) => useEditorStore.getState().setArtboards(artboards, activeArtboardId),
@@ -76,6 +90,35 @@ export function CanvasStage({ onReady, initialProject, onInitialized, onDocument
     window.addEventListener('orientationchange', refitMobile);
     window.visualViewport?.addEventListener('resize', refitMobile);
     document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    if (isDesktopApp) {
+      void Promise.all([import('@tauri-apps/api/window'), import('@tauri-apps/api/core')]).then(async ([windowApi, coreApi]) => {
+        if (!active) return;
+        unlistenNativeDrop = await windowApi.getCurrentWindow().onDragDropEvent((event) => {
+          if (!active || event.payload.type !== 'drop' || !event.payload.paths.length) return;
+          const paths = [...event.payload.paths];
+          const path = paths[0];
+          const fileName = path.split(/[\\/]/).pop() || 'dropped-file';
+          const extension = fileName.split('.').pop()?.toLowerCase() || '';
+          onToast('正在读取拖入的文件…');
+          void coreApi.invoke<ArrayBuffer | Uint8Array | number[]>('read_dropped_file', { path }).then((payload) => {
+            if (!active) return;
+            const bytes = payload instanceof ArrayBuffer
+              ? new Uint8Array(payload)
+              : payload instanceof Uint8Array
+                ? payload
+                : Uint8Array.from(payload);
+            const buffer = new ArrayBuffer(bytes.byteLength);
+            new Uint8Array(buffer).set(bytes);
+            const file = new File([buffer], fileName, { type: DROP_MIME_TYPES[extension] || 'application/octet-stream' });
+            window.dispatchEvent(new CustomEvent('dongni:request-import', { detail: file }));
+            if (paths.length > 1) onToast('已读取第一个文件，请完成导入后再拖入其他文件');
+          }).catch((error: unknown) => {
+            onToast(error instanceof Error ? error.message : '拖入文件读取失败', 'error');
+          });
+        });
+      }).catch(() => onToast('Windows 文件拖放初始化失败，请使用“打开文件”', 'error'));
+    }
 
     void restoreStoredFonts()
       .then((fonts) => {
@@ -131,6 +174,7 @@ export function CanvasStage({ onReady, initialProject, onInitialized, onDocument
       window.removeEventListener('orientationchange', refitMobile);
       window.visualViewport?.removeEventListener('resize', refitMobile);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      unlistenNativeDrop?.();
       wrapper.removeEventListener('pointerdown', onPointerDown);
       wrapper.removeEventListener('pointermove', onPointerMove);
       wrapper.removeEventListener('pointerup', onPointerUp);
