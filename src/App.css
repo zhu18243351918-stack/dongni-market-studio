@@ -1203,9 +1203,9 @@ button.layer-style-toggle.is-active { color: #111; background: rgba(249,115,22,.
   height: var(--brand-mark-size);
   flex-basis: var(--brand-mark-size);
   border-radius: 50%;
-  color: var(--brand-orange);
-  background: var(--brand-orange-soft);
-  border: 1px solid rgba(249,115,22,.2);
+  color: #fff;
+  background: var(--brand-orange);
+  border: 0;
   box-shadow: none;
 }
 .brand-lockup .system-brand__mark svg { width: 56%; height: 56%; color: inherit; transform: none; }
